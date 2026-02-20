@@ -8,10 +8,22 @@
   </head>
   <body>
     <main class="container">
-      <h1>ГарантияБот</h1>
-      <p class="sub">Введите дефект — получите развернутый ответ с правовыми нормами, сохранением кейса и журналом источников.</p>
+      <header class="topbar glass">
+        <div class="brand-wrap">
+          <div class="brand-dot"></div>
+          <div>
+            <h1>ГарантияБот</h1>
+            <p class="sub">Минималистичный интерфейс с расширенной правовой аналитикой</p>
+          </div>
+        </div>
+        <nav class="menu">
+          <a href="#" class="menu-item active">Главная</a>
+          <a href="#cases" class="menu-item">Кейсы</a>
+          <a href="#sourceLog" class="menu-item">Источники</a>
+        </nav>
+      </header>
 
-      <section class="card">
+      <section class="card glass">
         <label for="problemInput">Поисковая строка / описание проблемы</label>
         <div class="row">
           <input id="problemInput" type="text" placeholder="Например: Плесень на откосе окна, квартира угловая" />
@@ -23,7 +35,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card glass" id="cases-section">
         <h2>Сохранённые кейсы</h2>
         <div id="cases"></div>
         <div class="row actions">
@@ -32,7 +44,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card glass">
         <h2>Журнал источников</h2>
         <div id="sourceLog"></div>
       </section>
