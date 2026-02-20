@@ -1,97 +1,222 @@
-const STORAGE_KEY = "fz214_cases_v1";
+const STORAGE_CASES_KEY = "garantiabot_cases_v2";
+const STORAGE_MODEL_KEY = "garantiabot_learning_v2";
+const STORAGE_SOURCES_KEY = "garantiabot_sources_v2";
 
 const problemInput = document.getElementById("problemInput");
 const searchInput = document.getElementById("searchInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const clearBtn = document.getElementById("clearBtn");
 const casesContainer = document.getElementById("cases");
+const sourceLogContainer = document.getElementById("sourceLog");
 const dialog = document.getElementById("resultDialog");
 const resultBody = document.getElementById("resultBody");
 const saveCaseBtn = document.getElementById("saveCaseBtn");
 const closeDialogBtn = document.getElementById("closeDialogBtn");
+const feedbackUsefulBtn = document.getElementById("feedbackUsefulBtn");
+const feedbackNotUsefulBtn = document.getElementById("feedbackNotUsefulBtn");
 const downloadJsonBtn = document.getElementById("downloadJsonBtn");
 const downloadTxtBtn = document.getElementById("downloadTxtBtn");
 
-let cases = loadCases();
+const NORMATIVE_LIBRARY = {
+  windows: [
+    {
+      title: "СП 50.13330.2012 Тепловая защита зданий",
+      point: "раздел 5",
+      why: "Требования к температуре внутренней поверхности и исключению конденсации.",
+      link: "https://docs.cntd.ru/document/1200095525",
+    },
+    {
+      title: "ГОСТ 30971-2012 Швы монтажные узлов примыкания окон",
+      point: "п. 5.1-5.3",
+      why: "Требования к трехслойному монтажному шву и герметизации.",
+      link: "https://docs.cntd.ru/document/1200100069",
+    },
+  ],
+  leaks: [
+    {
+      title: "СП 30.13330.2020 Внутренний водопровод и канализация зданий",
+      point: "раздел 7",
+      why: "Требования к герметичности и испытаниям внутренних инженерных систем.",
+      link: "https://docs.cntd.ru/document/573659358",
+    },
+    {
+      title: "СП 17.13330.2017 Кровли",
+      point: "раздел 5",
+      why: "Требования к водонепроницаемости и узлам кровли.",
+      link: "https://docs.cntd.ru/document/456043632",
+    },
+  ],
+  cracks: [
+    {
+      title: "СП 70.13330.2012 Несущие и ограждающие конструкции",
+      point: "раздел 8",
+      why: "Требования к качеству бетонных и каменных конструкций, оценка дефектов.",
+      link: "https://docs.cntd.ru/document/1200095523",
+    },
+    {
+      title: "ГОСТ 31937-2011 Здания и сооружения. Правила обследования",
+      point: "раздел 6",
+      why: "Методика фиксации и классификации трещин при обследовании.",
+      link: "https://docs.cntd.ru/document/1200095062",
+    },
+  ],
+  ventilation: [
+    {
+      title: "СП 60.13330.2020 Отопление, вентиляция и кондиционирование",
+      point: "раздел 7",
+      why: "Требования к воздухообмену и контролю работы вентиляции.",
+      link: "https://docs.cntd.ru/document/573659360",
+    },
+    {
+      title: "СанПиН 1.2.3685-21",
+      point: "табл. микроклимата",
+      why: "Нормируемые параметры температуры и влажности в жилых помещениях.",
+      link: "https://docs.cntd.ru/document/573500115",
+    },
+  ],
+  general: [
+    {
+      title: "214-ФЗ, ст. 7",
+      point: "гарантия на объект долевого строительства",
+      why: "Определяет логику гарантийных обязательств застройщика.",
+      link: "http://www.consultant.ru/document/cons_doc_LAW_51038/",
+    },
+  ],
+};
+
+let cases = readJson(STORAGE_CASES_KEY, []);
+let learningModel = readJson(STORAGE_MODEL_KEY, {
+  windows: { developer: 8, owner: 2 },
+  leaks: { developer: 7, owner: 3 },
+  cracks: { developer: 6, owner: 4 },
+  ventilation: { developer: 5, owner: 5 },
+  general: { developer: 5, owner: 5 },
+});
+let sourceLog = readJson(STORAGE_SOURCES_KEY, []);
 let pendingCase = null;
 
 function now() {
   return new Date().toLocaleString("ru-RU");
 }
 
-function loadCases() {
+function readJson(key, fallback) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
   } catch {
-    return [];
+    return fallback;
   }
 }
 
-function persistCases() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cases));
+function persistAll() {
+  localStorage.setItem(STORAGE_CASES_KEY, JSON.stringify(cases));
+  localStorage.setItem(STORAGE_MODEL_KEY, JSON.stringify(learningModel));
+  localStorage.setItem(STORAGE_SOURCES_KEY, JSON.stringify(sourceLog));
 }
 
-function classify(problemText) {
-  const text = problemText.toLowerCase();
+function detectCategory(text) {
+  const t = text.toLowerCase();
+  if (/(плесень|сырость|влажн|окон|откос|промерзан)/.test(t)) return "windows";
+  if (/(протеч|теч|стояк|кровл|затоп)/.test(t)) return "leaks";
+  if (/(трещин|шов|фасад|раскрытие)/.test(t)) return "cracks";
+  if (/(вентиляц|тяга|конденсат)/.test(t)) return "ventilation";
+  return "general";
+}
 
-  const map = [
-    {
-      re: /(плесень|сырость|влажн|мокрое пятно)/,
-      type: "Окна/влажность",
-      classification: "Предварительно гарантийный",
-      recommendation:
-        "Проверить узел примыкания окна, герметизацию, тепловизор и вентиляцию. Зафиксировать актом осмотра.",
-    },
-    {
-      re: /(трещин|шов|фасад)/,
-      type: "Трещины/фасад",
-      classification: "Требует обследования",
-      recommendation:
-        "Уточнить динамику трещины, выполнить маячки/замеры, проверить конструктив и акт скрытых работ.",
-    },
-    {
-      re: /(теч|протеч|стояк|кровл)/,
-      type: "Протечки",
-      classification: "Предварительно гарантийный",
-      recommendation:
-        "Локализовать источник протечки, составить акт, проверить инженерные сети и смежные помещения.",
-    },
-    {
-      re: /(вентиляц|тяга)/,
-      type: "Вентиляция",
-      classification: "Недостаточно данных",
-      recommendation:
-        "Сделать замер тяги и притока воздуха, проверить вмешательства после ремонта, оформить акт.",
-    },
-  ];
+function composeSourceList(category) {
+  return [...(NORMATIVE_LIBRARY[category] || []), ...NORMATIVE_LIBRARY.general];
+}
 
-  const found = map.find((item) => item.re.test(text));
-  const base = found || {
-    type: "Общий дефект",
-    classification: "Недостаточно данных",
-    recommendation:
-      "Нужен акт осмотра, фотофиксация, сведения о вмешательствах собственника и сроках передачи/обращения.",
+function scoreProbabilities(category, text) {
+  const model = learningModel[category] || { developer: 5, owner: 5 };
+  let dev = model.developer;
+  let owner = model.owner;
+
+  if (/(ремонт|перенос|сверл|переплан|замен).*(собствен)/.test(text.toLowerCase())) owner += 2;
+  if (/(новострой|по акту|после передачи|без ремонта)/.test(text.toLowerCase())) dev += 1;
+
+  const sum = dev + owner;
+  const developerPct = Math.round((dev / sum) * 100);
+  const ownerPct = 100 - developerPct;
+  return { developerPct, ownerPct };
+}
+
+function createExpandedConclusion(problemText) {
+  const category = detectCategory(problemText);
+  const probabilities = scoreProbabilities(category, problemText);
+  const sources = composeSourceList(category);
+
+  const classification =
+    probabilities.developerPct >= 65
+      ? "Предварительно гарантийный случай"
+      : probabilities.ownerPct >= 65
+      ? "Предварительно не гарантийный (эксплуатационный)"
+      : "Недостаточно данных";
+
+  const sourceText = sources
+    .map((s, i) => `${i + 1}) ${s.title}, ${s.point}\n   Почему применимо: ${s.why}\n   Ссылка: ${s.link}`)
+    .join("\n\n");
+
+  const report = [
+    `1) Классификация: ${classification}`,
+    `   Вероятность ответственности застройщика: ${probabilities.developerPct}%`,
+    `   Вероятность эксплуатационной причины (собственник): ${probabilities.ownerPct}%`,
+    "",
+    "2) Ключевые факты:",
+    `- Получено описание: \"${problemText}\".`,
+    "- Требуются даты передачи и обращения, сведения о вмешательствах, акт осмотра.",
+    "",
+    "3) Технический анализ:",
+    "- Рассмотрены строительные и эксплуатационные причины.",
+    "- Без обследования на месте вывод носит предварительный характер.",
+    "",
+    "4) Правовая логика по 214-ФЗ:",
+    "- Основной критерий: возник ли недостаток по причинам, связанным с качеством строительства.",
+    "- Ключевой правовой ориентир: ст. 7 214-ФЗ (гарантийные обязательства застройщика).",
+    "",
+    "5) Нормативная база СП/СНиП/ГОСТ (ссылки и пункты):",
+    sourceText,
+    "",
+    "6) Что запросить дополнительно:",
+    "- Акт осмотра с фиксацией дефекта.",
+    "- Фото/видео, результаты инструментальных замеров.",
+    "- Данные о ремонте/перепланировке со стороны собственника.",
+    "",
+    "7) Рекомендации:",
+    "- Собственнику: подать письменную претензию, обеспечить доступ для осмотра.",
+    "- Застройщику: провести комиссионный осмотр, оформить акт причин дефекта.",
+    "- При споре: независимая экспертиза.",
+    "",
+    "8) Важно:",
+    "- Ссылки на нормы предоставлены как рабочие источники; перед юридически значимыми действиями нужно проверить актуальность редакции и пунктов.",
+    "",
+    "9) Контур самообучения:",
+    "- После фактического исхода кейса нажмите 'Подтвердилось' или 'Не подтвердилось'.",
+    "- Модель скорректирует веса категории и улучшит прогнозы по похожим обращениям.",
+  ].join("\n");
+
+  const sourceEntry = {
+    time: now(),
+    problem: problemText,
+    category,
+    sources,
   };
+  sourceLog.unshift(sourceEntry);
 
-  const ownerRisk = /(ремонт|перенос|сверлен|замен|переплан)/.test(text) ? 45 : 20;
-  const warrantyProbability = base.classification.includes("гарантийный") ? 75 : 45;
+  return { report, category, probabilities, sources };
+}
 
-  return {
-    ...base,
-    warrantyProbability,
-    ownerRisk,
-  };
+function applyFeedback(category, confirmed) {
+  const model = learningModel[category] || { developer: 5, owner: 5 };
+  if (confirmed) model.developer += 1;
+  else model.owner += 1;
+  learningModel[category] = model;
 }
 
 function renderCases() {
-  const q = searchInput.value.trim().toLowerCase();
+  const query = searchInput.value.trim().toLowerCase();
   const filtered = cases.filter(
-    (c) =>
-      !q ||
-      c.problem.toLowerCase().includes(q) ||
-      c.solution.type.toLowerCase().includes(q) ||
-      c.solution.classification.toLowerCase().includes(q),
+    (c) => !query || c.problem.toLowerCase().includes(query) || c.classification.toLowerCase().includes(query),
   );
 
   if (!filtered.length) {
@@ -102,40 +227,44 @@ function renderCases() {
   casesContainer.innerHTML = filtered
     .map(
       (c) => `
-      <div class="case">
-        <div class="meta">${c.createdAt}</div>
-        <strong>Проблема:</strong> ${c.problem}<br/>
-        <strong>Категория:</strong> ${c.solution.type}<br/>
-        <strong>Статус:</strong> ${c.solution.classification}<br/>
-        <strong>Вероятность гарантии:</strong> ${c.solution.warrantyProbability}%<br/>
-        <strong>Риск ошибки/вмешательства собственника:</strong> ${c.solution.ownerRisk}%<br/>
-        <strong>Решение:</strong> ${c.solution.recommendation}
-      </div>
-    `,
+        <div class="case">
+          <div class="meta">${c.createdAt}</div>
+          <strong>Проблема:</strong> ${c.problem}<br/>
+          <strong>Категория:</strong> ${c.category}<br/>
+          <strong>Итог:</strong> ${c.classification}<br/>
+          <strong>Вероятность застройщика:</strong> ${c.developerPct}%<br/>
+          <strong>Вероятность эксплуатации:</strong> ${c.ownerPct}%
+        </div>`,
     )
     .join("");
 }
 
-function openResultWindow(problemText, solution) {
-  const output = [
-    `Проблема: ${problemText}`,
-    `Категория: ${solution.type}`,
-    `Классификация: ${solution.classification}`,
-    `Вероятность гарантии: ${solution.warrantyProbability}%`,
-    `Риск ошибки/вмешательства собственника: ${solution.ownerRisk}%`,
-    `Рекомендация: ${solution.recommendation}`,
-  ].join("\n");
-
-  resultBody.innerHTML = `<pre>${output}</pre>`;
-  dialog.showModal();
+function renderSourceLog() {
+  if (!sourceLog.length) {
+    sourceLogContainer.innerHTML = "<p>Источники пока не использовались.</p>";
+    return;
+  }
+  sourceLogContainer.innerHTML = sourceLog
+    .slice(0, 20)
+    .map(
+      (item) => `
+      <div class="source-item">
+        <div class="meta">${item.time} | Категория: ${item.category}</div>
+        <strong>Запрос:</strong> ${item.problem}
+        <ul>
+          ${item.sources.map((s) => `<li>${s.title}, ${s.point} — <a href="${s.link}" target="_blank">ссылка</a></li>`).join("")}
+        </ul>
+      </div>`,
+    )
+    .join("");
 }
 
-function downloadFile(filename, content, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
+function downloadFile(name, content, type) {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = name;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -144,51 +273,74 @@ analyzeBtn.addEventListener("click", () => {
   const text = problemInput.value.trim();
   if (!text) return;
 
-  const solution = classify(text);
+  const out = createExpandedConclusion(text);
+  const classificationLine = out.report.split("\n")[0];
   pendingCase = {
     id: crypto.randomUUID(),
-    problem: text,
-    solution,
     createdAt: now(),
+    problem: text,
+    category: out.category,
+    classification: classificationLine.replace("1) Классификация: ", ""),
+    developerPct: out.probabilities.developerPct,
+    ownerPct: out.probabilities.ownerPct,
+    fullReport: out.report,
   };
 
-  openResultWindow(text, solution);
+  resultBody.innerHTML = `<pre class="report">${out.report}</pre>`;
+  renderSourceLog();
+  persistAll();
+  dialog.showModal();
 });
 
 saveCaseBtn.addEventListener("click", () => {
   if (!pendingCase) return;
   cases.unshift(pendingCase);
-  persistCases();
-  renderCases();
   pendingCase = null;
+  persistAll();
+  renderCases();
   dialog.close();
   problemInput.value = "";
 });
 
-closeDialogBtn.addEventListener("click", () => {
-  dialog.close();
+feedbackUsefulBtn.addEventListener("click", () => {
+  if (!pendingCase) return;
+  applyFeedback(pendingCase.category, true);
+  persistAll();
+  alert("Модель обновлена: случай подтвержден.");
 });
 
+feedbackNotUsefulBtn.addEventListener("click", () => {
+  if (!pendingCase) return;
+  applyFeedback(pendingCase.category, false);
+  persistAll();
+  alert("Модель обновлена: случай не подтвердился.");
+});
+
+closeDialogBtn.addEventListener("click", () => dialog.close());
 searchInput.addEventListener("input", renderCases);
 
 clearBtn.addEventListener("click", () => {
   cases = [];
-  persistCases();
+  sourceLog = [];
+  persistAll();
   renderCases();
+  renderSourceLog();
 });
 
 downloadJsonBtn.addEventListener("click", () => {
-  downloadFile("fz214-cases.json", JSON.stringify(cases, null, 2), "application/json");
+  downloadFile(
+    "garantiabot-data.json",
+    JSON.stringify({ cases, sourceLog, learningModel }, null, 2),
+    "application/json",
+  );
 });
 
 downloadTxtBtn.addEventListener("click", () => {
   const text = cases
-    .map(
-      (c, i) =>
-        `#${i + 1}\nДата: ${c.createdAt}\nПроблема: ${c.problem}\nКатегория: ${c.solution.type}\nСтатус: ${c.solution.classification}\nВероятность гарантии: ${c.solution.warrantyProbability}%\nРиск собственника: ${c.solution.ownerRisk}%\nРешение: ${c.solution.recommendation}\n`,
-    )
-    .join("\n");
-  downloadFile("fz214-cases.txt", text, "text/plain");
+    .map((c, i) => `#${i + 1}\nДата: ${c.createdAt}\nПроблема: ${c.problem}\nКатегория: ${c.category}\nИтог: ${c.classification}\nЗастройщик: ${c.developerPct}%\nСобственник: ${c.ownerPct}%\n\n${c.fullReport}`)
+    .join("\n\n-----\n\n");
+  downloadFile("garantiabot-cases.txt", text, "text/plain");
 });
 
 renderCases();
+renderSourceLog();

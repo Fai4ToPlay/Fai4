@@ -3,21 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FZ-214 Defect Assistant</title>
+    <title>ГарантияБот</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="container">
-      <h1>Ассистент по дефектам ФЗ-214</h1>
-      <p class="sub">Введите проблему, получите решение в отдельном окне и сохраняйте всю историю.</p>
+      <h1>ГарантияБот</h1>
+      <p class="sub">Введите дефект — получите развернутый ответ с правовыми нормами, сохранением кейса и журналом источников.</p>
 
       <section class="card">
         <label for="problemInput">Поисковая строка / описание проблемы</label>
         <div class="row">
-          <input id="problemInput" type="text" placeholder="Например: Плесень на откосе окна" />
-          <button id="analyzeBtn">Найти решение</button>
+          <input id="problemInput" type="text" placeholder="Например: Плесень на откосе окна, квартира угловая" />
+          <button id="analyzeBtn">Сформировать заключение</button>
         </div>
-
         <div class="row second">
           <input id="searchInput" type="text" placeholder="Поиск по сохранённой истории" />
           <button id="clearBtn" class="danger">Очистить всё</button>
@@ -32,14 +31,21 @@
           <button id="downloadTxtBtn">Скачать TXT</button>
         </div>
       </section>
+
+      <section class="card">
+        <h2>Журнал источников</h2>
+        <div id="sourceLog"></div>
+      </section>
     </main>
 
     <dialog id="resultDialog">
       <article>
-        <h2>Решение по обращению</h2>
+        <h2>Развернутое заключение</h2>
         <div id="resultBody"></div>
-        <div class="row actions">
+        <div class="row actions wrap">
           <button id="saveCaseBtn">Сохранить кейс</button>
+          <button id="feedbackUsefulBtn">✅ Подтвердилось (обучить)</button>
+          <button id="feedbackNotUsefulBtn" class="danger">❌ Не подтвердилось (обучить)</button>
           <button id="closeDialogBtn">Закрыть окно</button>
         </div>
       </article>
