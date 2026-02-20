@@ -154,8 +154,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     </main>
 
     <script>
-const STORAGE_CASES_KEY = "ferrumbot_cases_v7";
-const STORAGE_LEARNING_KEY = "ferrumbot_learning_v7";
+const STORAGE_CASES_KEY = "ferrumbot_cases_v8";
+const STORAGE_LEARNING_KEY = "ferrumbot_learning_v8";
 
 const problemInput = document.getElementById("problemInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -178,6 +178,16 @@ const TRUSTED_DOMAINS = [
 ];
 
 const NORMATIVE_TITLE_PATTERN = /(ГОСТ|СНиП|СП\s|Свод правил|Техническ(ий|ого) регламент|ТР\s|Методическ|Рекомендац|Р\s\d+\.?\d*)/i;
+const GREETINGS_PATTERN = /(добрый день|здравствуйте|привет|прошу решить|помогите|нет слов|пожалуйста|подскажите)/gi;
+
+const SYNONYM_MAP = [
+  { re: /(разбух|вспучил|поднял[ао]?сь|волн[аы])/gi, term: "вздутие покрытия" },
+  { re: /(теч[её]т|подтек|капает)/gi, term: "протечка" },
+  { re: /(плеснев|грибок)/gi, term: "плесень" },
+  { re: /(сквозит|дует)/gi, term: "инфильтрация воздуха" },
+  { re: /(лопнул|растрескал)/gi, term: "трещина" },
+  { re: /(мокрое пятно|сырое пятно)/gi, term: "увлажнение" },
+];
 
 let cases = readJson(STORAGE_CASES_KEY, []);
 let learningMap = readJson(STORAGE_LEARNING_KEY, {});
@@ -231,84 +241,157 @@ function extractLinksFromMarkdown(text) {
   return links;
 }
 
-function analyzeInternally(rawText) {
-  const text = rawText.toLowerCase();
+function fixCommonTypos(text) {
+  return text
+    .replace(/пртичк/gi, "протечка")
+    .replace(/вентеляц/gi, "вентиляц")
+    .replace(/трещена/gi, "трещина")
+    .replace(/конденсатт/gi, "конденсат");
+}
 
-  const defectType = /(плесень|конденсат|сырость|промерз)/.test(text)
-    ? "влажностно-теплотехнический"
-    : /(протеч|теч|затоп|стояк|кровл)/.test(text)
-      ? "протечка"
-      : /(трещин|деформац|раскрыт|осадк)/.test(text)
-        ? "деформационный"
-        : /(вентиляц|тяга|воздухообмен)/.test(text)
-          ? "вентиляционный"
-          : "общестроительный";
+function simpleLemmatize(text) {
+  return text
+    .replace(/\bпротекает\b/gi, "протечка")
+    .replace(/\bпромерзает\b/gi, "промерзание")
+    .replace(/\bпотрескалась\b/gi, "трещина")
+    .replace(/\bвлажно\b/gi, "влажность")
+    .replace(/\bтечет\b/gi, "протечка");
+}
 
-  const location = /(кровл)/.test(text)
-    ? "кровля"
-    : /(стояк|сануз|канализац|водопровод)/.test(text)
-      ? "инженерный стояк"
-      : /(фасад|наруж)/.test(text)
-        ? "фасад/наружные ограждения"
-        : /(перекрыт|потолок)/.test(text)
-          ? "перекрытие"
-          : /(отделк|стяжк|плитк|штукатур)/.test(text)
-            ? "отделочные покрытия"
-            : /(окон|откос)/.test(text)
-              ? "оконный узел"
-              : "не уточнено";
+function applySynonyms(text) {
+  let out = text;
+  SYNONYM_MAP.forEach((s) => {
+    out = out.replace(s.re, s.term);
+  });
+  return out;
+}
 
-  const operationConditions = [
-    /(после зим|в мороз|зимой)/.test(text) ? "зимний период" : null,
-    /(высокая влаж|сыро|конденсат)/.test(text) ? "повышенная влажность" : null,
-    /(без отоплен|не заселен)/.test(text) ? "нештатный режим отопления/заселения" : null,
-  ].filter(Boolean);
+function splitPotentialDefects(text) {
+  const separators = /(?:\.|;|\n|,\sи\s|\s+и\s+ещ[её]\s+|\s+также\s+)/gi;
+  return text
+    .split(separators)
+    .map((x) => x.trim())
+    .filter((x) => x.length > 12);
+}
 
-  const commissioningTerm = /(сразу|после передачи|новострой)/.test(text)
-    ? "ранний срок после ввода/передачи"
-    : /(через \d+ (месяц|месяцев|лет|года|год))/.test(text)
-      ? "срок указан пользователем"
-      : "срок не указан";
+function extractEntities(text) {
+  const t = text.toLowerCase();
+  return {
+    objectType: /(квартир|помещен|дом|этаж)/.test(t)
+      ? "квартира/помещение"
+      : /(кровл)/.test(t)
+        ? "кровля"
+        : /(фасад)/.test(t)
+          ? "фасад"
+          : /(стояк)/.test(t)
+            ? "стояк"
+            : /(перекрыт|потолок)/.test(t)
+              ? "перекрытие/потолок"
+              : /(пол|стяжк)/.test(t)
+                ? "пол/стяжка"
+                : "не определен",
+    elementType: /(отделк|плитк|ламинат|штукатур)/.test(t)
+      ? "отделка"
+      : /(стояк|вентиляц|водопровод|канализац)/.test(t)
+        ? "инженерная система"
+        : /(стена|фасад|перекрыт|колон|плита)/.test(t)
+          ? "несущая/ограждающая конструкция"
+          : /(утепл)/.test(t)
+            ? "утепление"
+            : "не определен",
+    defectNature: /(трещин)/.test(t)
+      ? "трещина"
+      : /(промерзан)/.test(t)
+        ? "промерзание"
+        : /(протечк|увлажнен)/.test(t)
+          ? "протечка/увлажнение"
+          : /(вздутие покрытия)/.test(t)
+            ? "вздутие покрытия"
+            : /(конденсат)/.test(t)
+              ? "конденсат"
+              : /(деформац)/.test(t)
+                ? "деформация"
+                : /(корроз)/.test(t)
+                  ? "коррозия"
+                  : "не определен",
+    timeFactor: /(через\s+\d+\s+(месяц|месяцев|лет|года|год))/i.test(t)
+      ? t.match(/через\s+\d+\s+(месяц|месяцев|лет|года|год)/i)?.[0] || "указан"
+      : /(после зим)/.test(t)
+        ? "после зимы"
+        : /(сразу после|после заселени|после передачи)/.test(t)
+          ? "сразу после заселения/передачи"
+          : "не указан",
+    operationConditions: [
+      /(неотапливаем|без отоплен)/.test(t) ? "неотапливаемое помещение" : null,
+      /(незаселен)/.test(t) ? "незаселенный этаж/помещение" : null,
+      /(влажност|сыро|конденсат)/.test(t) ? "повышенная влажность" : null,
+    ].filter(Boolean),
+  };
+}
 
-  const technologyViolationSigns = [
-    /(плесень|конденсат|промерз)/.test(text) ? "возможное нарушение тепло-влажностного режима узла" : null,
-    /(протеч|теч)/.test(text) ? "возможное нарушение герметичности/гидроизоляции" : null,
-    /(трещин|раскрыт)/.test(text) ? "возможные нарушения технологии работ или проектного решения" : null,
-  ].filter(Boolean);
-
-  const defectClass = /(протеч|герметич|монтаж|шов)/.test(text)
+function classifyDefectFromEntities(entities, text) {
+  const t = text.toLowerCase();
+  const category = /(монтаж|шов|герметич|протечк)/.test(t)
     ? "монтажный/технологический"
-    : /(трещин|деформац|осадк)/.test(text)
-      ? "конструктивный или проектный"
-      : /(после ремонта|вмешател|повред)/.test(text)
+    : /(трещин|деформац|осадк)/.test(t)
+      ? "конструктивный/проектный"
+      : /(после ремонта|вмешател|повред|эксплуатац)/.test(t)
         ? "эксплуатационный"
         : "требует уточнения";
 
-  const systemType = /(стояк|вентиляц|водопровод|канализац)/.test(text)
-    ? "инженерные сети"
-    : /(фасад|окон|перекрыт|стена|кровл)/.test(text)
-      ? "ограждающие/несущие конструкции"
-      : "отделочные покрытия";
+  const normativeSection = /(промерзан|конденсат|плесень|окон|откос)/.test(t)
+    ? "ГОСТ/СП по тепловой защите и узлам примыкания"
+    : /(протеч|стояк|кровл|гидроизоляц)/.test(t)
+      ? "СП/СНиП по инженерным системам и гидроизоляции"
+      : /(трещин|деформац)/.test(t)
+        ? "СП/СНиП/ГОСТ по конструкциям и дефектам"
+        : "общие требования к качеству строительных работ";
 
-  const normativeSectionHint = /(окон|откос|плесень|конденсат)/.test(text)
-    ? "тепловая защита и монтаж узлов примыкания"
-    : /(протеч|стояк|кровл)/.test(text)
-      ? "гидроизоляция и инженерные системы"
-      : /(трещин|деформац)/.test(text)
-        ? "допустимые дефекты конструкций"
-        : "общие требования к качеству работ";
+  const technicalCore = `${entities.defectNature} в зоне «${entities.objectType}/${entities.elementType}» при условиях «${entities.operationConditions.join(", ") || "не уточнены"}», срок: ${entities.timeFactor}`;
+
+  return { category, normativeSection, technicalCore };
+}
+
+function nlpPreprocessUserText(rawText) {
+  const cleaned = rawText
+    .replace(GREETINGS_PATTERN, " ")
+    .replace(/[!?]{2,}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const typoFixed = fixCommonTypos(cleaned);
+  const lemmatized = simpleLemmatize(typoFixed);
+  const synonymed = applySynonyms(lemmatized);
+  const chunks = splitPotentialDefects(synonymed);
+
+  const parts = chunks.length ? chunks : [synonymed];
+  const items = parts.map((part) => {
+    const entities = extractEntities(part);
+    const cls = classifyDefectFromEntities(entities, part);
+    return {
+      raw: part,
+      entities,
+      defectClass: cls.category,
+      normativeSectionHint: cls.normativeSection,
+      technicalCore: cls.technicalCore,
+      isClear: entities.defectNature !== "не определен" && entities.objectType !== "не определен",
+    };
+  });
 
   return {
-    defectType,
-    location,
-    operationConditions,
-    commissioningTerm,
-    technologyViolationSigns,
-    defectClass,
-    systemType,
-    normativeSectionHint,
-    technicalOnly: true,
+    normalizedTechnicalText: synonymed,
+    defectItems: items,
   };
+}
+
+function buildClarifyingQuestion(item) {
+  const missing = [];
+  if (item.entities.objectType === "не определен") missing.push("где возник дефект (кровля, стояк, фасад, перекрытие и т.д.)");
+  if (item.entities.defectNature === "не определен") missing.push("какое физическое проявление (трещина, протечка, промерзание, вздутие и т.д.)");
+  if (item.entities.timeFactor === "не указан") missing.push("когда проявился дефект (сразу, после зимы, через N месяцев)");
+
+  if (!missing.length) return null;
+  return `Уточните, пожалуйста: ${missing.join("; ")}.`;
 }
 
 async function fetchAsText(url) {
@@ -317,8 +400,8 @@ async function fetchAsText(url) {
   return res.text();
 }
 
-async function searchTrustedSourcesRealtime(searchText, internal) {
-  const query = encodeURIComponent(`${searchText} ${internal.normativeSectionHint} ГОСТ СНиП СП технический регламент`);
+async function searchTrustedSourcesRealtime(searchText, sectionHint) {
+  const query = encodeURIComponent(`${searchText} ${sectionHint} ГОСТ СНиП СП технический регламент методические рекомендации`);
   const searchRaw = await fetchAsText(`https://r.jina.ai/http://duckduckgo.com/html/?q=${query}`);
 
   const links = extractLinksFromMarkdown(searchRaw)
@@ -333,13 +416,10 @@ async function searchTrustedSourcesRealtime(searchText, internal) {
       const clean = text.replace(/\s+/g, " ").trim();
       const snippet = clean.slice(0, 900);
       if (snippet.length < 180) continue;
-
-      // hard filter: skip obvious non-normative promo/forum-like pages by keywords
-      if (/(форум|реклама|реклам|купить|продажа|маркетплейс)/i.test(clean.slice(0, 2000))) continue;
-
+      if (/(форум|реклама|реклам|купить|продажа|маркетплейс|блог личный)/i.test(clean.slice(0, 2500))) continue;
       resolved.push({ ...item, snippet });
     } catch {
-      // skip errors
+      // skip
     }
     if (resolved.length >= 5) break;
   }
@@ -349,26 +429,29 @@ async function searchTrustedSourcesRealtime(searchText, internal) {
 
 function extractNormativeRefs(sources) {
   const refs = [];
-  const refRegex = /(ГОСТ\s*\d+[\d.-]*|СНиП\s*\d+[\d.-]*|СП\s*\d+[\d.-]*|Техническ(?:ий|ого) регламент[^.,;\n]*)/gi;
-  const pointRegex = /(ст\.?\s*\d+(?:\.\d+)?|п\.?\s*\d+(?:\.\d+)?(?:[-–]\d+(?:\.\d+)?)?|раздел\s*\d+(?:\.\d+)?)/gi;
+  const refRegex = /(ГОСТ\s*\d+[\d.-]*|СНиП\s*\d+[\d.-]*|СП\s*\d+[\d.-]*|Техническ(?:ий|ого) регламент[^.,;\n]*|ТР\s*ЕАЭС[^.,;\n]*)/gi;
+  const pointRegex = /(п\.?\s*\d+(?:\.\d+)?(?:[-–]\d+(?:\.\d+)?)?|раздел\s*\d+(?:\.\d+)?|таблиц[аы]\s*\d+)/gi;
 
   sources.forEach((s) => {
-    const titleMatches = (s.title.match(refRegex) || []).map((m) => m.trim());
-    const snippetMatches = (s.snippet.match(refRegex) || []).map((m) => m.trim());
-    const points = (s.snippet.match(pointRegex) || []).slice(0, 3).map((m) => m.trim());
+    const norms = [...new Set([...(s.title.match(refRegex) || []), ...(s.snippet.match(refRegex) || [])].map((x) => x.trim()))];
+    const points = [...new Set((s.snippet.match(pointRegex) || []).slice(0, 4).map((x) => x.trim()))];
 
-    [...new Set([...titleMatches, ...snippetMatches])].forEach((norm) => {
-      refs.push({ norm, points: points.length ? points.join(", ") : "пункт требует уточнения по первоисточнику", url: s.url });
+    norms.forEach((norm) => {
+      refs.push({
+        norm,
+        points: points.length ? points.join(", ") : "пункты требуют уточнения по первоисточнику",
+        url: s.url,
+      });
     });
   });
 
-  return refs.slice(0, 8);
+  return refs.slice(0, 10);
 }
 
-function updateLearningMap(internal, refs) {
-  const key = `${internal.defectType} | ${internal.normativeSectionHint}`;
+function updateLearningMap(defectItem, refs) {
+  const key = `${defectItem.defectClass} | ${defectItem.normativeSectionHint}`;
   if (!learningMap[key]) {
-    learningMap[key] = { count: 0, norms: {} };
+    learningMap[key] = { count: 0, norms: {}, lastCore: defectItem.technicalCore };
   }
   learningMap[key].count += 1;
   refs.forEach((r) => {
@@ -376,25 +459,25 @@ function updateLearningMap(internal, refs) {
   });
 }
 
-function buildTechnicalAnswer(searchText, internal, sources, refs) {
+function buildTechnicalAnswer(originalText, normalizedText, defectItem, sources, refs) {
   const normsText = refs.length
     ? refs.map((r) => `- ${r.norm}; ориентировочно: ${r.points}; источник: ${r.url}`).join("\n")
-    : "- По найденным материалам точные номера пунктов требуют дополнительной верификации в тексте официального документа.";
+    : "- Точные нормативные реквизиты по найденным материалам требуют дополнительной верификации.";
 
   const sourceAnalysis = sources
     .slice(0, 3)
-    .map((s, i) => `Источник ${i + 1}: ${s.title}\n${s.snippet.slice(0, 380)}...`)
+    .map((s, i) => `Источник ${i + 1}: ${s.title}\n${s.snippet.slice(0, 390)}...`)
     .join("\n\n");
 
-  const qualification = /(монтажный|технологический)/.test(internal.defectClass)
+  const qualification = /(монтажный|технологический)/.test(defectItem.defectClass)
     ? "нарушение технологии"
-    : /(конструктивный|проектный)/.test(internal.defectClass)
-      ? "несоответствие нормативам или проектному решению"
-      : /(эксплуатационный)/.test(internal.defectClass)
-        ? "вероятное эксплуатационное воздействие"
+    : /(конструктивный|проектный)/.test(defectItem.defectClass)
+      ? "несоответствие нормативам"
+      : /(эксплуатационный)/.test(defectItem.defectClass)
+        ? "эксплуатационный фактор"
         : "требуется инструментальное обследование";
 
-  return `Краткое техническое заключение.\n\nПо обращению «${searchText}» выполнен технический анализ в реальном времени. Описание дефекта отнесено к типу «${internal.defectType}», зона возникновения — «${internal.location}», система — «${internal.systemType}». По совокупности признаков предварительная техническая квалификация: ${qualification}.\n\nПеречень применимых нормативных документов.\n\n${normsText}\n\nАнализ соответствия описанной ситуации требованиям нормативов.\n\nСопоставление признаков дефекта с найденными нормативными материалами показывает, что проверка должна фокусироваться на технологии выполнения работ, условиях монтажа и эксплуатационном режиме. Дополнительно учитываются: ${internal.operationConditions.join(", ") || "условия эксплуатации не уточнены"}; срок с момента ввода/передачи: ${internal.commissioningTerm}; признаки возможного нарушения технологии: ${internal.technologyViolationSigns.join(", ") || "явные признаки не указаны"}.\n\nИтоговая техническая квалификация.\n\n${qualification}. Для окончательного технического вывода требуется акт осмотра, инструментальные замеры (влажность/температура, тепловизионная съемка, измерение деформаций — по типу дефекта) и проверка узла на соответствие проектной документации.\n\nФрагменты источников.\n\n${sourceAnalysis}`;
+  return `Краткое техническое заключение.\n\nПо обращению «${originalText}» после первичной NLP-нормализации сформировано техническое ядро запроса: «${normalizedText}». Анализируемый дефект: ${defectItem.technicalCore}. Предварительная квалификация: ${qualification}.\n\nПеречень применимых нормативных документов.\n\n${normsText}\n\nАнализ соответствия описанной ситуации требованиям нормативов.\n\nСитуация сопоставлена с требованиями к технологии выполнения работ, условиям монтажа и эксплуатационному режиму. Если подтверждаются признаки нарушения технологии (герметичность, узлы примыкания, температурно-влажностный режим, допустимые отклонения), дефект относится к несоответствию нормативам. Если выявляется влияние условий эксплуатации, требуется разграничение причин по инструментальным данным.\n\nИтоговая техническая квалификация.\n\n${qualification}. Для окончательного вывода необходимы: акт осмотра, фотофиксация, измерения (температура/влажность/деформации), а при споре — инструментальное обследование профильным специалистом.\n\nФрагменты источников.\n\n${sourceAnalysis}`;
 }
 
 async function typeText(element, text, speed = 8) {
@@ -448,45 +531,82 @@ function renderCases() {
   });
 }
 
-async function processQuestion(text, caseRef) {
-  resultBody.innerHTML = `<div class="status-line">Ищу информацию.</div>`;
-
-  const internal = analyzeInternally(text); // internal stage, not fully shown to user
+async function processOneDefectItem(originalText, normalizedText, defectItem, caseRef) {
+  const clarifyingQuestion = buildClarifyingQuestion(defectItem);
+  if (clarifyingQuestion) {
+    await typeText(resultBody, `Ищу информацию.\n\nПока не перехожу к поиску нормативов: ${clarifyingQuestion}`);
+    caseRef.partialEntities = defectItem.entities;
+    const historyRow = {
+      question: originalText,
+      answer: clarifyingQuestion,
+      refs: [],
+      sources: [],
+      internal: defectItem,
+      at: now(),
+      status: "need_clarification",
+    };
+    caseRef.history.push(historyRow);
+    caseRef.preview = clarifyingQuestion;
+    persistAll();
+    renderCases();
+    return;
+  }
 
   let sources = [];
   try {
-    sources = await searchTrustedSourcesRealtime(text, internal);
+    sources = await searchTrustedSourcesRealtime(defectItem.technicalCore, defectItem.normativeSectionHint);
   } catch {
-    resultBody.textContent =
-      "Не удалось выполнить realtime-поиск по нормативным источникам. Повторите запрос позже.";
-    return null;
+    await typeText(resultBody, "Ищу информацию.\n\nНе удалось выполнить realtime-поиск по нормативным источникам. Повторите запрос позже.");
+    return;
   }
 
   if (!sources.length) {
-    resultBody.textContent =
-      "Проверяемые нормативные источники не найдены. Уточните тип дефекта, место, срок с момента ввода и условия эксплуатации.";
-    return null;
+    await typeText(resultBody, "Ищу информацию.\n\nПроверяемые нормативные источники не найдены. Уточните описание дефекта и место возникновения.");
+    return;
   }
 
   const refs = extractNormativeRefs(sources);
-  updateLearningMap(internal, refs);
-  const answer = buildTechnicalAnswer(text, internal, sources, refs);
+  updateLearningMap(defectItem, refs);
+  const answer = buildTechnicalAnswer(originalText, normalizedText, defectItem, sources, refs);
   await typeText(resultBody, answer);
 
   const historyRow = {
-    question: text,
+    question: originalText,
     answer,
-    sources,
     refs,
-    internal,
+    sources,
+    internal: defectItem,
     at: now(),
+    status: "analyzed",
   };
 
   caseRef.history.push(historyRow);
   caseRef.preview = answer.slice(0, 130) + (answer.length > 130 ? "..." : "");
   persistAll();
   renderCases();
-  return historyRow;
+}
+
+async function processQuestion(text, caseRef) {
+  resultBody.innerHTML = `<div class="status-line">Ищу информацию.</div>`;
+
+  const nlp = nlpPreprocessUserText(text);
+
+  // if multiple defects in one text, split to child defect items and process first one now
+  caseRef.detectedItems = nlp.defectItems.map((d) => ({
+    core: d.technicalCore,
+    class: d.defectClass,
+    object: d.entities.objectType,
+    nature: d.entities.defectNature,
+  }));
+
+  if (nlp.defectItems.length > 1) {
+    caseRef.preview = `Выделено ${nlp.defectItems.length} дефектов, начат анализ первого.`;
+    persistAll();
+    renderCases();
+  }
+
+  // analyze first defect item; follow-ups can continue same case context
+  await processOneDefectItem(text, nlp.normalizedTechnicalText, nlp.defectItems[0], caseRef);
 }
 
 analyzeBtn.addEventListener("click", async () => {
@@ -499,6 +619,8 @@ analyzeBtn.addEventListener("click", async () => {
     problem: text,
     preview: "",
     history: [],
+    detectedItems: [],
+    partialEntities: null,
   };
   cases.unshift(newCase);
   selectCase(newCase.id);
