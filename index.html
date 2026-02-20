@@ -3,51 +3,61 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ГарантияБот</title>
+    <title>FerrumBot</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="container">
-      <header class="topbar glass">
-        <div class="brand-wrap">
-          <div class="brand-dot"></div>
-          <div>
-            <h1>ГарантияБот</h1>
-            <p class="sub">Минималистичный интерфейс с расширенной правовой аналитикой</p>
+    <header class="top-nav">
+      <div class="logo">FB</div>
+      <nav>
+        <a href="#">Дом</a>
+        <a href="#">Чат ИИ</a>
+        <a href="#">Видео ИИ</a>
+        <a href="#">Блог</a>
+      </nav>
+      <button class="auth-btn">Авторизоваться</button>
+    </header>
+
+    <main class="layout">
+      <section class="chat-panel">
+        <div class="chat-head">
+          <h1>FerrumBot</h1>
+          <p>Юридический и технический помощник по гарантийным случаям ФЗ-214</p>
+        </div>
+
+        <div class="message-box" id="resultBodyWrap">
+          <div id="resultBodyPlaceholder">
+            Введите описание дефекта, чтобы получить развернутое заключение со ссылками на нормы.
           </div>
         </div>
-        <nav class="menu">
-          <a href="#" class="menu-item active">Главная</a>
-          <a href="#cases" class="menu-item">Кейсы</a>
-          <a href="#sourceLog" class="menu-item">Источники</a>
-        </nav>
-      </header>
 
-      <section class="card glass">
-        <label for="problemInput">Поисковая строка / описание проблемы</label>
-        <div class="row">
-          <input id="problemInput" type="text" placeholder="Например: Плесень на откосе окна, квартира угловая" />
-          <button id="analyzeBtn">Сформировать заключение</button>
+        <div class="input-box">
+          <label for="problemInput">Опишите проблему</label>
+          <div class="input-row">
+            <input id="problemInput" type="text" placeholder="Например: Плесень на откосе окна, квартира угловая" />
+            <button id="analyzeBtn">Сформировать</button>
+          </div>
         </div>
-        <div class="row second">
+
+        <div class="history-search">
           <input id="searchInput" type="text" placeholder="Поиск по сохранённой истории" />
-          <button id="clearBtn" class="danger">Очистить всё</button>
+          <button id="clearBtn" class="danger">Очистить</button>
+          <button id="downloadJsonBtn">JSON</button>
+          <button id="downloadTxtBtn">TXT</button>
         </div>
       </section>
 
-      <section class="card glass" id="cases-section">
-        <h2>Сохранённые кейсы</h2>
-        <div id="cases"></div>
-        <div class="row actions">
-          <button id="downloadJsonBtn">Скачать JSON</button>
-          <button id="downloadTxtBtn">Скачать TXT</button>
+      <aside class="tools-panel">
+        <h2>Связанные инструменты</h2>
+        <div class="tool-card">
+          <h3>Сохранённые кейсы</h3>
+          <div id="cases"></div>
         </div>
-      </section>
-
-      <section class="card glass">
-        <h2>Журнал источников</h2>
-        <div id="sourceLog"></div>
-      </section>
+        <div class="tool-card">
+          <h3>Журнал источников</h3>
+          <div id="sourceLog"></div>
+        </div>
+      </aside>
     </main>
 
     <dialog id="resultDialog">
@@ -64,5 +74,15 @@
     </dialog>
 
     <script src="app.js"></script>
+    <script>
+      const resultBodyEl = document.getElementById('resultBody');
+      const placeholder = document.getElementById('resultBodyPlaceholder');
+      const observer = new MutationObserver(() => {
+        if (resultBodyEl && resultBodyEl.textContent.trim()) {
+          placeholder.innerHTML = resultBodyEl.innerHTML;
+        }
+      });
+      observer.observe(resultBodyEl, { childList: true, subtree: true, characterData: true });
+    </script>
   </body>
 </html>
