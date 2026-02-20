@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FZ-214 Defect Assistant</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Ассистент по дефектам ФЗ-214</h1>
+      <p class="sub">Введите проблему, получите решение в отдельном окне и сохраняйте всю историю.</p>
+
+      <section class="card">
+        <label for="problemInput">Поисковая строка / описание проблемы</label>
+        <div class="row">
+          <input id="problemInput" type="text" placeholder="Например: Плесень на откосе окна" />
+          <button id="analyzeBtn">Найти решение</button>
+        </div>
+
+        <div class="row second">
+          <input id="searchInput" type="text" placeholder="Поиск по сохранённой истории" />
+          <button id="clearBtn" class="danger">Очистить всё</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Сохранённые кейсы</h2>
+        <div id="cases"></div>
+        <div class="row actions">
+          <button id="downloadJsonBtn">Скачать JSON</button>
+          <button id="downloadTxtBtn">Скачать TXT</button>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="resultDialog">
+      <article>
+        <h2>Решение по обращению</h2>
+        <div id="resultBody"></div>
+        <div class="row actions">
+          <button id="saveCaseBtn">Сохранить кейс</button>
+          <button id="closeDialogBtn">Закрыть окно</button>
+        </div>
+      </article>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

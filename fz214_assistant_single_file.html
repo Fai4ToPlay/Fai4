@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FZ-214 Defect Assistant</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    body { margin: 0; background: #f4f7fb; color: #1e2a36; }
+    .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+    h1 { margin-bottom: 6px; }
+    .sub { margin-top: 0; color: #5a6978; }
+    .card { background: white; border-radius: 12px; padding: 16px; margin: 16px 0; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+    label { display:block; margin-bottom:8px; font-weight:600; }
+    .row { display:flex; gap:8px; }
+    .row.second { margin-top:10px; }
+    input { flex:1; border:1px solid #cfd8e3; border-radius:8px; padding:10px; font-size:14px; }
+    button { border:none; background:#2b6cf6; color:#fff; border-radius:8px; padding:10px 14px; cursor:pointer; }
+    button.danger { background:#c0392b; }
+    .actions { margin-top:12px; }
+    #cases { display:grid; gap:10px; }
+    .case { border:1px solid #dde5ef; border-radius:10px; padding:10px; background:#fbfdff; }
+    .case .meta { color:#6a7888; font-size:12px; margin-bottom:6px; }
+    dialog { width:min(760px,95vw); border:none; border-radius:12px; padding:0; }
+    dialog::backdrop { background:rgba(12,20,30,.5); }
+    dialog article { padding:16px; }
+    pre { white-space: pre-wrap; background:#f4f7fb; border-radius:8px; padding:10px; margin:0; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>Ассистент по дефектам ФЗ-214</h1>
+    <p class="sub">Введите проблему, получите решение в отдельном окне и сохраняйте всю историю.</p>
+
+    <section class="card">
+      <label for="problemInput">Поисковая строка / описание проблемы</label>
+      <div class="row">
+        <input id="problemInput" type="text" placeholder="Например: Плесень на откосе окна" />
+        <button id="analyzeBtn">Найти решение</button>
+      </div>
+      <div class="row second">
+        <input id="searchInput" type="text" placeholder="Поиск по сохранённой истории" />
+        <button id="clearBtn" class="danger">Очистить всё</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Сохранённые кейсы</h2>
+      <div id="cases"></div>
+      <div class="row actions">
+        <button id="downloadJsonBtn">Скачать JSON</button>
+        <button id="downloadTxtBtn">Скачать TXT</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="resultDialog">
+    <article>
+      <h2>Решение по обращению</h2>
+      <div id="resultBody"></div>
+      <div class="row actions">
+        <button id="saveCaseBtn">Сохранить кейс</button>
+        <button id="closeDialogBtn">Закрыть окно</button>
+      </div>
+    </article>
+  </dialog>
+
+  <script>
+    const STORAGE_KEY = "fz214_cases_v1";
+    const $ = (id) => document.getElementById(id);
+    const problemInput = $("problemInput");
+    const searchInput = $("searchInput");
+    const analyzeBtn = $("analyzeBtn");
+    const clearBtn = $("clearBtn");
+    const casesContainer = $("cases");
+    const dialog = $("resultDialog");
+    const resultBody = $("resultBody");
+    const saveCaseBtn = $("saveCaseBtn");
+    const closeDialogBtn = $("closeDialogBtn");
+    const downloadJsonBtn = $("downloadJsonBtn");
+    const downloadTxtBtn = $("downloadTxtBtn");
+
+    let cases = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    let pendingCase = null;
+
+    function persistCases() { localStorage.setItem(STORAGE_KEY, JSON.stringify(cases)); }
+    function now() { return new Date().toLocaleString("ru-RU"); }
+
+    function classify(problemText) {
+      const text = problemText.toLowerCase();
+      const map = [
+        { re: /(плесень|сырость|влажн|мокрое пятно)/, type: "Окна/влажность", classification: "Предварительно гарантийный", recommendation: "Проверить узел примыкания окна, герметизацию, тепловизор и вентиляцию. Зафиксировать актом осмотра." },
+        { re: /(трещин|шов|фасад)/, type: "Трещины/фасад", classification: "Требует обследования", recommendation: "Уточнить динамику трещины, выполнить маячки/замеры, проверить конструктив и акт скрытых работ." },
+        { re: /(теч|протеч|стояк|кровл)/, type: "Протечки", classification: "Предварительно гарантийный", recommendation: "Локализовать источник протечки, составить акт, проверить инженерные сети и смежные помещения." },
+      ];
+      const found = map.find((item) => item.re.test(text));
+      const base = found || { type: "Общий дефект", classification: "Недостаточно данных", recommendation: "Нужен акт осмотра, фотофиксация, сведения о вмешательствах собственника и сроках передачи/обращения." };
+      const ownerRisk = /(ремонт|перенос|сверлен|замен|переплан)/.test(text) ? 45 : 20;
+      const warrantyProbability = base.classification.includes("гарантийный") ? 75 : 45;
+      return { ...base, warrantyProbability, ownerRisk };
+    }
+
+    function renderCases() {
+      const q = searchInput.value.trim().toLowerCase();
+      const filtered = cases.filter((c) => !q || c.problem.toLowerCase().includes(q) || c.solution.type.toLowerCase().includes(q));
+      if (!filtered.length) { casesContainer.innerHTML = "<p>Кейсов пока нет.</p>"; return; }
+      casesContainer.innerHTML = filtered.map((c) => `
+        <div class="case">
+          <div class="meta">${c.createdAt}</div>
+          <strong>Проблема:</strong> ${c.problem}<br/>
+          <strong>Категория:</strong> ${c.solution.type}<br/>
+          <strong>Статус:</strong> ${c.solution.classification}<br/>
+          <strong>Вероятность гарантии:</strong> ${c.solution.warrantyProbability}%<br/>
+          <strong>Риск ошибки/вмешательства собственника:</strong> ${c.solution.ownerRisk}%<br/>
+          <strong>Решение:</strong> ${c.solution.recommendation}
+        </div>
+      `).join("");
+    }
+
+    function downloadFile(filename, content, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    analyzeBtn.addEventListener("click", () => {
+      const text = problemInput.value.trim();
+      if (!text) return;
+      const solution = classify(text);
+      pendingCase = { id: crypto.randomUUID(), problem: text, solution, createdAt: now() };
+      resultBody.innerHTML = `<pre>Проблема: ${text}\nКатегория: ${solution.type}\nКлассификация: ${solution.classification}\nВероятность гарантии: ${solution.warrantyProbability}%\nРиск ошибки/вмешательства собственника: ${solution.ownerRisk}%\nРекомендация: ${solution.recommendation}</pre>`;
+      dialog.showModal();
+    });
+
+    saveCaseBtn.addEventListener("click", () => {
+      if (!pendingCase) return;
+      cases.unshift(pendingCase);
+      persistCases();
+      renderCases();
+      pendingCase = null;
+      dialog.close();
+      problemInput.value = "";
+    });
+
+    closeDialogBtn.addEventListener("click", () => dialog.close());
+    searchInput.addEventListener("input", renderCases);
+    clearBtn.addEventListener("click", () => { cases = []; persistCases(); renderCases(); });
+    downloadJsonBtn.addEventListener("click", () => downloadFile("fz214-cases.json", JSON.stringify(cases, null, 2), "application/json"));
+    downloadTxtBtn.addEventListener("click", () => downloadFile("fz214-cases.txt", cases.map((c, i) => `#${i+1}\n${c.createdAt}\n${c.problem}\n${c.solution.classification}\n${c.solution.recommendation}`).join("\n\n"), "text/plain"));
+
+    renderCases();
+  </script>
+</body>
+</html>
