@@ -243,6 +243,11 @@ function now() {
   return new Date().toLocaleString("ru-RU");
 }
 
+function generateId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
 function normalizeUrl(url) {
   try {
     return new URL(url).href;
@@ -322,7 +327,7 @@ async function retrieveNormativeChunksRealtime(searchText, sectionHint, caseId) 
       .slice(0, 8)
       .forEach((chunk) => {
         rows.push({
-          id: crypto.randomUUID(),
+          id: generateId(),
           caseId,
           global: false,
           sourceTitle: doc.title,
@@ -509,7 +514,7 @@ async function processQuestion(text, caseRef) {
 
     for (let i = 1; i < parts.length; i += 1) {
       const sub = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         createdAt: now(),
         problem: parts[i],
         preview: "",
@@ -533,7 +538,7 @@ analyzeBtn.addEventListener("click", async () => {
   if (!text) return;
 
   const newCase = {
-    id: crypto.randomUUID(),
+    id: generateId(),
     createdAt: now(),
     problem: text,
     preview: "",
