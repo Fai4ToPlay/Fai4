@@ -1,5 +1,6 @@
-const STORAGE_CASES_KEY = "ferrumbot_cases_v8";
-const STORAGE_LEARNING_KEY = "ferrumbot_learning_v8";
+const STORAGE_CASES_KEY = "ferrumbot_cases_v9";
+const STORAGE_LEARNING_KEY = "ferrumbot_learning_v9";
+const STORAGE_VECTORDB_KEY = "ferrumbot_vectordb_v9";
 
 const problemInput = document.getElementById("problemInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -8,6 +9,8 @@ const casesContainer = document.getElementById("cases");
 const followupInput = document.getElementById("followupInput");
 const followupBtn = document.getElementById("followupBtn");
 const activeCaseInfo = document.getElementById("activeCaseInfo");
+const confirmBtn = document.getElementById("confirmBtn");
+const rejectBtn = document.getElementById("rejectBtn");
 
 const TRUSTED_DOMAINS = [
   "gost.ru",
@@ -33,22 +36,207 @@ const SYNONYM_MAP = [
   { re: /(мокрое пятно|сырое пятно)/gi, term: "увлажнение" },
 ];
 
-let cases = readJson(STORAGE_CASES_KEY, []);
-let learningMap = readJson(STORAGE_LEARNING_KEY, {});
-let selectedCaseId = null;
+class NLPEngine {
+  static fixCommonTypos(text) {
+    return text
+      .replace(/пртичк/gi, "протечка")
+      .replace(/вентеляц/gi, "вентиляц")
+      .replace(/трещена/gi, "трещина")
+      .replace(/конденсатт/gi, "конденсат");
+  }
 
-function readJson(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
+  static lemmatizeLight(text) {
+    return text
+      .replace(/\bпротекает\b/gi, "протечка")
+      .replace(/\bпромерзает\b/gi, "промерзание")
+      .replace(/\bпотрескалась\b/gi, "трещина")
+      .replace(/\bвлажно\b/gi, "влажность")
+      .replace(/\bтечет\b/gi, "протечка");
+  }
+
+  static applySynonyms(text) {
+    let out = text;
+    SYNONYM_MAP.forEach((s) => {
+      out = out.replace(s.re, s.term);
+    });
+    return out;
+  }
+
+  static splitDefects(text) {
+    const separators = /(?:\.|;|\n|,\sи\s|\s+и\s+ещ[её]\s+|\s+также\s+)/gi;
+    return text
+      .split(separators)
+      .map((x) => x.trim())
+      .filter((x) => x.length > 12);
+  }
+
+  static encode(text) {
+    const dim = 128;
+    const vec = new Array(dim).fill(0);
+    const tokens = text.toLowerCase().split(/[^а-яa-z0-9]+/).filter(Boolean);
+    tokens.forEach((token) => {
+      let h = 0;
+      for (let i = 0; i < token.length; i += 1) h = (h * 31 + token.charCodeAt(i)) % 1000003;
+      const idx = h % dim;
+      vec[idx] += 1;
+    });
+    const norm = Math.sqrt(vec.reduce((acc, x) => acc + x * x, 0)) || 1;
+    return vec.map((x) => x / norm);
+  }
+
+  static preprocess(rawText) {
+    const cleaned = rawText.replace(GREETINGS_PATTERN, " ").replace(/[!?]{2,}/g, " ").replace(/\s+/g, " ").trim();
+    const typoFixed = NLPEngine.fixCommonTypos(cleaned);
+    const lemmatized = NLPEngine.lemmatizeLight(typoFixed);
+    const synonymed = NLPEngine.applySynonyms(lemmatized);
+    const chunks = NLPEngine.splitDefects(synonymed);
+    const parts = chunks.length ? chunks : [synonymed];
+    return {
+      normalizedTechnicalText: synonymed,
+      parts,
+      embedding: NLPEngine.encode(synonymed),
+    };
   }
 }
+
+class NERModel {
+  static extract(text) {
+    const t = text.toLowerCase();
+    return {
+      element: /(кровл)/.test(t)
+        ? "кровля"
+        : /(стояк|сануз|канализац|водопровод)/.test(t)
+          ? "инженерный стояк"
+          : /(фасад|наруж)/.test(t)
+            ? "фасад/наружные ограждения"
+            : /(перекрыт|потолок)/.test(t)
+              ? "перекрытие/потолок"
+              : /(пол|стяжк|ламинат|плитк)/.test(t)
+                ? "пол/покрытие"
+                : /(окон|откос)/.test(t)
+                  ? "оконный узел"
+                  : "не определен",
+      system_type: /(стояк|вентиляц|водопровод|канализац)/.test(t)
+        ? "инженерные сети"
+        : /(фасад|окон|перекрыт|стена|кровл)/.test(t)
+          ? "ограждающие/несущие конструкции"
+          : /(отделк|пол|плитк|штукатур)/.test(t)
+            ? "отделочные покрытия"
+            : "не определен",
+      defect_type: /(трещин)/.test(t)
+        ? "трещина"
+        : /(промерзан)/.test(t)
+          ? "промерзание"
+          : /(протечк|увлажнен)/.test(t)
+            ? "протечка/увлажнение"
+            : /(вздутие покрытия)/.test(t)
+              ? "вздутие покрытия"
+              : /(конденсат)/.test(t)
+                ? "конденсат"
+                : /(деформац)/.test(t)
+                  ? "деформация"
+                  : /(корроз)/.test(t)
+                    ? "коррозия"
+                    : "не определен",
+      conditions: [
+        /(неотапливаем|без отоплен)/.test(t) ? "неотапливаемое помещение" : null,
+        /(незаселен)/.test(t) ? "незаселенный этаж/помещение" : null,
+        /(влажност|сыро|конденсат)/.test(t) ? "повышенная влажность" : null,
+      ].filter(Boolean),
+      time_factor: /(через\s+\d+\s+(месяц|месяцев|лет|года|год))/i.test(t)
+        ? t.match(/через\s+\d+\s+(месяц|месяцев|лет|года|год)/i)?.[0] || "указан"
+        : /(после зим)/.test(t)
+          ? "после зимы"
+          : /(сразу после|после заселени|после передачи)/.test(t)
+            ? "сразу после заселения/передачи"
+            : "не указан",
+    };
+  }
+}
+
+class DefectClassifier {
+  constructor(learningState) {
+    this.state = learningState;
+    this.labels = [
+      "конструктивный дефект",
+      "монтажный дефект",
+      "нарушение технологии",
+      "проектная ошибка",
+      "эксплуатационный фактор",
+      "недостаточно данных",
+    ];
+  }
+
+  classify(entities, text) {
+    const t = text.toLowerCase();
+    const scores = {
+      "конструктивный дефект": /(трещин|деформац|осадк)/.test(t) ? 2.2 : 0.6,
+      "монтажный дефект": /(шов|герметич|примыкан|монтаж)/.test(t) ? 2.0 : 0.6,
+      "нарушение технологии": /(протеч|вздутие|отслоен|промерзан)/.test(t) ? 2.1 : 0.8,
+      "проектная ошибка": /(узел|проект|непредусмотр)/.test(t) ? 1.6 : 0.5,
+      "эксплуатационный фактор": /(после ремонта|повред|эксплуатац|механическ)/.test(t) ? 1.9 : 0.7,
+      "недостаточно данных": entities.defect_type === "не определен" || entities.element === "не определен" ? 2.4 : 0.3,
+    };
+
+    const bias = this.state.bias || {};
+    Object.keys(scores).forEach((k) => {
+      scores[k] += bias[k] || 0;
+    });
+
+    const logits = this.labels.map((l) => scores[l]);
+    const exps = logits.map((x) => Math.exp(x));
+    const sum = exps.reduce((a, b) => a + b, 0) || 1;
+    const probs = this.labels.map((l, i) => ({ label: l, prob: exps[i] / sum }));
+    probs.sort((a, b) => b.prob - a.prob);
+    return probs;
+  }
+
+  updateWithFeedback(topLabel, positive = true) {
+    if (!this.state.bias) this.state.bias = {};
+    this.state.bias[topLabel] = (this.state.bias[topLabel] || 0) + (positive ? 0.08 : -0.08);
+  }
+}
+
+class VectorStore {
+  constructor(initial) {
+    this.rows = initial || [];
+  }
+
+  upsertMany(items) {
+    this.rows.push(...items);
+    this.rows = this.rows.slice(-2500);
+  }
+
+  search(queryVec, caseId, k = 5) {
+    const scoped = this.rows.filter((r) => !caseId || r.caseId === caseId || r.global);
+    const scored = scoped.map((r) => ({ ...r, score: cosine(r.embedding, queryVec) }));
+    return scored.sort((a, b) => b.score - a.score).slice(0, k);
+  }
+}
+
+function cosine(a, b) {
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < Math.min(a.length, b.length); i += 1) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  const d = Math.sqrt(na) * Math.sqrt(nb);
+  return d ? dot / d : 0;
+}
+
+const vectorStore = new VectorStore(readJson(STORAGE_VECTORDB_KEY, []));
+let cases = readJson(STORAGE_CASES_KEY, []);
+let learningMap = readJson(STORAGE_LEARNING_KEY, { bias: {} });
+let selectedCaseId = null;
+const classifier = new DefectClassifier(learningMap);
 
 function persistAll() {
   localStorage.setItem(STORAGE_CASES_KEY, JSON.stringify(cases));
   localStorage.setItem(STORAGE_LEARNING_KEY, JSON.stringify(learningMap));
+  localStorage.setItem(STORAGE_VECTORDB_KEY, JSON.stringify(vectorStore.rows));
 }
 
 function now() {
@@ -85,157 +273,12 @@ function extractLinksFromMarkdown(text) {
   return links;
 }
 
-function fixCommonTypos(text) {
-  return text
-    .replace(/пртичк/gi, "протечка")
-    .replace(/вентеляц/gi, "вентиляц")
-    .replace(/трещена/gi, "трещина")
-    .replace(/конденсатт/gi, "конденсат");
-}
-
-function simpleLemmatize(text) {
-  return text
-    .replace(/\bпротекает\b/gi, "протечка")
-    .replace(/\bпромерзает\b/gi, "промерзание")
-    .replace(/\bпотрескалась\b/gi, "трещина")
-    .replace(/\bвлажно\b/gi, "влажность")
-    .replace(/\bтечет\b/gi, "протечка");
-}
-
-function applySynonyms(text) {
-  let out = text;
-  SYNONYM_MAP.forEach((s) => {
-    out = out.replace(s.re, s.term);
-  });
-  return out;
-}
-
-function splitPotentialDefects(text) {
-  const separators = /(?:\.|;|\n|,\sи\s|\s+и\s+ещ[её]\s+|\s+также\s+)/gi;
-  return text
-    .split(separators)
-    .map((x) => x.trim())
-    .filter((x) => x.length > 12);
-}
-
-function extractEntities(text) {
-  const t = text.toLowerCase();
-  return {
-    objectType: /(квартир|помещен|дом|этаж)/.test(t)
-      ? "квартира/помещение"
-      : /(кровл)/.test(t)
-        ? "кровля"
-        : /(фасад)/.test(t)
-          ? "фасад"
-          : /(стояк)/.test(t)
-            ? "стояк"
-            : /(перекрыт|потолок)/.test(t)
-              ? "перекрытие/потолок"
-              : /(пол|стяжк)/.test(t)
-                ? "пол/стяжка"
-                : "не определен",
-    elementType: /(отделк|плитк|ламинат|штукатур)/.test(t)
-      ? "отделка"
-      : /(стояк|вентиляц|водопровод|канализац)/.test(t)
-        ? "инженерная система"
-        : /(стена|фасад|перекрыт|колон|плита)/.test(t)
-          ? "несущая/ограждающая конструкция"
-          : /(утепл)/.test(t)
-            ? "утепление"
-            : "не определен",
-    defectNature: /(трещин)/.test(t)
-      ? "трещина"
-      : /(промерзан)/.test(t)
-        ? "промерзание"
-        : /(протечк|увлажнен)/.test(t)
-          ? "протечка/увлажнение"
-          : /(вздутие покрытия)/.test(t)
-            ? "вздутие покрытия"
-            : /(конденсат)/.test(t)
-              ? "конденсат"
-              : /(деформац)/.test(t)
-                ? "деформация"
-                : /(корроз)/.test(t)
-                  ? "коррозия"
-                  : "не определен",
-    timeFactor: /(через\s+\d+\s+(месяц|месяцев|лет|года|год))/i.test(t)
-      ? t.match(/через\s+\d+\s+(месяц|месяцев|лет|года|год)/i)?.[0] || "указан"
-      : /(после зим)/.test(t)
-        ? "после зимы"
-        : /(сразу после|после заселени|после передачи)/.test(t)
-          ? "сразу после заселения/передачи"
-          : "не указан",
-    operationConditions: [
-      /(неотапливаем|без отоплен)/.test(t) ? "неотапливаемое помещение" : null,
-      /(незаселен)/.test(t) ? "незаселенный этаж/помещение" : null,
-      /(влажност|сыро|конденсат)/.test(t) ? "повышенная влажность" : null,
-    ].filter(Boolean),
-  };
-}
-
-function classifyDefectFromEntities(entities, text) {
-  const t = text.toLowerCase();
-  const category = /(монтаж|шов|герметич|протечк)/.test(t)
-    ? "монтажный/технологический"
-    : /(трещин|деформац|осадк)/.test(t)
-      ? "конструктивный/проектный"
-      : /(после ремонта|вмешател|повред|эксплуатац)/.test(t)
-        ? "эксплуатационный"
-        : "требует уточнения";
-
-  const normativeSection = /(промерзан|конденсат|плесень|окон|откос)/.test(t)
-    ? "ГОСТ/СП по тепловой защите и узлам примыкания"
-    : /(протеч|стояк|кровл|гидроизоляц)/.test(t)
-      ? "СП/СНиП по инженерным системам и гидроизоляции"
-      : /(трещин|деформац)/.test(t)
-        ? "СП/СНиП/ГОСТ по конструкциям и дефектам"
-        : "общие требования к качеству строительных работ";
-
-  const technicalCore = `${entities.defectNature} в зоне «${entities.objectType}/${entities.elementType}» при условиях «${entities.operationConditions.join(", ") || "не уточнены"}», срок: ${entities.timeFactor}`;
-
-  return { category, normativeSection, technicalCore };
-}
-
-function nlpPreprocessUserText(rawText) {
-  const cleaned = rawText
-    .replace(GREETINGS_PATTERN, " ")
-    .replace(/[!?]{2,}/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const typoFixed = fixCommonTypos(cleaned);
-  const lemmatized = simpleLemmatize(typoFixed);
-  const synonymed = applySynonyms(lemmatized);
-  const chunks = splitPotentialDefects(synonymed);
-
-  const parts = chunks.length ? chunks : [synonymed];
-  const items = parts.map((part) => {
-    const entities = extractEntities(part);
-    const cls = classifyDefectFromEntities(entities, part);
-    return {
-      raw: part,
-      entities,
-      defectClass: cls.category,
-      normativeSectionHint: cls.normativeSection,
-      technicalCore: cls.technicalCore,
-      isClear: entities.defectNature !== "не определен" && entities.objectType !== "не определен",
-    };
-  });
-
-  return {
-    normalizedTechnicalText: synonymed,
-    defectItems: items,
-  };
-}
-
-function buildClarifyingQuestion(item) {
+function buildClarifyingQuestion(entities) {
   const missing = [];
-  if (item.entities.objectType === "не определен") missing.push("где возник дефект (кровля, стояк, фасад, перекрытие и т.д.)");
-  if (item.entities.defectNature === "не определен") missing.push("какое физическое проявление (трещина, протечка, промерзание, вздутие и т.д.)");
-  if (item.entities.timeFactor === "не указан") missing.push("когда проявился дефект (сразу, после зимы, через N месяцев)");
-
-  if (!missing.length) return null;
-  return `Уточните, пожалуйста: ${missing.join("; ")}.`;
+  if (entities.element === "не определен") missing.push("где возник дефект (кровля, стояк, фасад, перекрытие и т.д.)");
+  if (entities.defect_type === "не определен") missing.push("какое физическое проявление (трещина, протечка, промерзание, вздутие и т.д.)");
+  if (entities.time_factor === "не указан") missing.push("когда проявился дефект (сразу, после зимы, через N месяцев)");
+  return missing.length ? `Уточните, пожалуйста: ${missing.join("; ")}.` : null;
 }
 
 async function fetchAsText(url) {
@@ -244,84 +287,102 @@ async function fetchAsText(url) {
   return res.text();
 }
 
-async function searchTrustedSourcesRealtime(searchText, sectionHint) {
+function chunkText(text, maxLen = 600) {
+  const clean = text.replace(/\s+/g, " ").trim();
+  const chunks = [];
+  for (let i = 0; i < clean.length; i += maxLen) chunks.push(clean.slice(i, i + maxLen));
+  return chunks;
+}
+
+async function retrieveNormativeChunksRealtime(searchText, sectionHint, caseId) {
   const query = encodeURIComponent(`${searchText} ${sectionHint} ГОСТ СНиП СП технический регламент методические рекомендации`);
   const searchRaw = await fetchAsText(`https://r.jina.ai/http://duckduckgo.com/html/?q=${query}`);
 
   const links = extractLinksFromMarkdown(searchRaw)
     .filter((item) => NORMATIVE_TITLE_PATTERN.test(item.title))
     .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx)
-    .slice(0, 10);
+    .slice(0, 8);
 
-  const resolved = [];
+  const docs = [];
   for (const item of links) {
     try {
       const text = await fetchAsText(`https://r.jina.ai/http://${item.url.replace(/^https?:\/\//, "")}`);
-      const clean = text.replace(/\s+/g, " ").trim();
-      const snippet = clean.slice(0, 900);
-      if (snippet.length < 180) continue;
-      if (/(форум|реклама|реклам|купить|продажа|маркетплейс|блог личный)/i.test(clean.slice(0, 2500))) continue;
-      resolved.push({ ...item, snippet });
+      if (/(форум|реклама|реклам|купить|продажа|маркетплейс|блог личный)/i.test(text.slice(0, 2600))) continue;
+      docs.push({ ...item, text });
     } catch {
       // skip
     }
-    if (resolved.length >= 5) break;
+    if (docs.length >= 4) break;
   }
 
-  return resolved;
+  const rows = [];
+  docs.forEach((doc) => {
+    chunkText(doc.text, 620)
+      .filter((c) => c.length > 160)
+      .slice(0, 8)
+      .forEach((chunk) => {
+        rows.push({
+          id: crypto.randomUUID(),
+          caseId,
+          global: false,
+          sourceTitle: doc.title,
+          sourceUrl: doc.url,
+          chunk,
+          embedding: NLPEngine.encode(chunk),
+          createdAt: Date.now(),
+        });
+      });
+  });
+
+  vectorStore.upsertMany(rows);
+  return rows;
 }
 
-function extractNormativeRefs(sources) {
+function extractNormativeRefs(chunks) {
   const refs = [];
   const refRegex = /(ГОСТ\s*\d+[\d.-]*|СНиП\s*\d+[\d.-]*|СП\s*\d+[\d.-]*|Техническ(?:ий|ого) регламент[^.,;\n]*|ТР\s*ЕАЭС[^.,;\n]*)/gi;
   const pointRegex = /(п\.?\s*\d+(?:\.\d+)?(?:[-–]\d+(?:\.\d+)?)?|раздел\s*\d+(?:\.\d+)?|таблиц[аы]\s*\d+)/gi;
 
-  sources.forEach((s) => {
-    const norms = [...new Set([...(s.title.match(refRegex) || []), ...(s.snippet.match(refRegex) || [])].map((x) => x.trim()))];
-    const points = [...new Set((s.snippet.match(pointRegex) || []).slice(0, 4).map((x) => x.trim()))];
-
+  chunks.forEach((c) => {
+    const norms = [...new Set((c.chunk.match(refRegex) || []).map((x) => x.trim()))];
+    const points = [...new Set((c.chunk.match(pointRegex) || []).slice(0, 3).map((x) => x.trim()))];
     norms.forEach((norm) => {
-      refs.push({
-        norm,
-        points: points.length ? points.join(", ") : "пункты требуют уточнения по первоисточнику",
-        url: s.url,
-      });
+      refs.push({ norm, points: points.length ? points.join(", ") : "пункты требуют уточнения", url: c.sourceUrl });
     });
   });
 
   return refs.slice(0, 10);
 }
 
-function updateLearningMap(defectItem, refs) {
-  const key = `${defectItem.defectClass} | ${defectItem.normativeSectionHint}`;
-  if (!learningMap[key]) {
-    learningMap[key] = { count: 0, norms: {}, lastCore: defectItem.technicalCore };
-  }
+function updateLearningMap(defectClass, sectionHint, refs) {
+  const key = `${defectClass} | ${sectionHint}`;
+  if (!learningMap[key]) learningMap[key] = { count: 0, norms: {} };
   learningMap[key].count += 1;
   refs.forEach((r) => {
     learningMap[key].norms[r.norm] = (learningMap[key].norms[r.norm] || 0) + 1;
   });
 }
 
-function buildTechnicalAnswer(originalText, normalizedText, defectItem, sources, refs) {
+function buildTechnicalAnswer(originalText, normalizedText, entities, classProbs, refs, retrievedChunks) {
+  const topClass = classProbs[0]?.label || "недостаточно данных";
   const normsText = refs.length
     ? refs.map((r) => `- ${r.norm}; ориентировочно: ${r.points}; источник: ${r.url}`).join("\n")
-    : "- Точные нормативные реквизиты по найденным материалам требуют дополнительной верификации.";
+    : "- По найденным материалам точные реквизиты требуют дополнительной верификации в официальном документе.";
 
-  const sourceAnalysis = sources
+  const sourceAnalysis = retrievedChunks
     .slice(0, 3)
-    .map((s, i) => `Источник ${i + 1}: ${s.title}\n${s.snippet.slice(0, 390)}...`)
+    .map((c, i) => `Источник ${i + 1}: ${c.sourceTitle}\n${c.chunk.slice(0, 360)}...`)
     .join("\n\n");
 
-  const qualification = /(монтажный|технологический)/.test(defectItem.defectClass)
+  const qualification = /нарушение технологии|монтажный дефект/.test(topClass)
     ? "нарушение технологии"
-    : /(конструктивный|проектный)/.test(defectItem.defectClass)
+    : /конструктивный дефект|проектная ошибка/.test(topClass)
       ? "несоответствие нормативам"
-      : /(эксплуатационный)/.test(defectItem.defectClass)
+      : /эксплуатационный фактор/.test(topClass)
         ? "эксплуатационный фактор"
         : "требуется инструментальное обследование";
 
-  return `Краткое техническое заключение.\n\nПо обращению «${originalText}» после первичной NLP-нормализации сформировано техническое ядро запроса: «${normalizedText}». Анализируемый дефект: ${defectItem.technicalCore}. Предварительная квалификация: ${qualification}.\n\nПеречень применимых нормативных документов.\n\n${normsText}\n\nАнализ соответствия описанной ситуации требованиям нормативов.\n\nСитуация сопоставлена с требованиями к технологии выполнения работ, условиям монтажа и эксплуатационному режиму. Если подтверждаются признаки нарушения технологии (герметичность, узлы примыкания, температурно-влажностный режим, допустимые отклонения), дефект относится к несоответствию нормативам. Если выявляется влияние условий эксплуатации, требуется разграничение причин по инструментальным данным.\n\nИтоговая техническая квалификация.\n\n${qualification}. Для окончательного вывода необходимы: акт осмотра, фотофиксация, измерения (температура/влажность/деформации), а при споре — инструментальное обследование профильным специалистом.\n\nФрагменты источников.\n\n${sourceAnalysis}`;
+  return `Краткое техническое заключение.\n\nПо обращению «${originalText}» после NLP-предобработки сформирован технический запрос: «${normalizedText}». Система выделила: элемент «${entities.element}», тип системы «${entities.system_type}», дефект «${entities.defect_type}», условия «${entities.conditions.join(", ") || "не указаны"}», время проявления «${entities.time_factor}».\n\nПеречень применимых нормативных документов (RAG-выборка).\n\n${normsText}\n\nАнализ соответствия описанной ситуации требованиям нормативов.\n\nСемантический поиск по векторной базе нормативных фрагментов выполнил сопоставление признаков дефекта с требованиями к технологии работ, условиям монтажа и допустимым отклонениям. Вывод сформирован только на основе найденных нормативных фрагментов.\n\nИтоговая техническая квалификация.\n\n${qualification}. Для окончательного заключения требуется инструментальное обследование по месту дефекта и проверка соответствия проектной документации.\n\nФрагменты релевантных нормативов.\n\n${sourceAnalysis}`;
 }
 
 async function typeText(element, text, speed = 8) {
@@ -336,18 +397,19 @@ function getCasePreview(text) {
   return text.replace(/\s+/g, " ").trim().slice(0, 95);
 }
 
+function setCaseControlsEnabled(enabled) {
+  followupInput.disabled = !enabled;
+  followupBtn.disabled = !enabled;
+  confirmBtn.disabled = !enabled;
+  rejectBtn.disabled = !enabled;
+}
+
 function selectCase(caseId) {
   selectedCaseId = caseId;
   const selected = cases.find((c) => c.id === caseId);
-  followupInput.disabled = !selected;
-  followupBtn.disabled = !selected;
-  activeCaseInfo.textContent = selected
-    ? `Активный кейс: ${selected.problem.slice(0, 90)}`
-    : "Активный кейс: не выбран.";
-
-  if (selected?.history?.length) {
-    resultBody.textContent = selected.history[selected.history.length - 1].answer;
-  }
+  setCaseControlsEnabled(!!selected);
+  activeCaseInfo.textContent = selected ? `Активный кейс: ${selected.problem.slice(0, 90)}` : "Активный кейс: не выбран.";
+  if (selected?.history?.length) resultBody.textContent = selected.history[selected.history.length - 1].answer;
   renderCases();
 }
 
@@ -375,56 +437,56 @@ function renderCases() {
   });
 }
 
-async function processOneDefectItem(originalText, normalizedText, defectItem, caseRef) {
-  const clarifyingQuestion = buildClarifyingQuestion(defectItem);
-  if (clarifyingQuestion) {
-    await typeText(resultBody, `Ищу информацию.\n\nПока не перехожу к поиску нормативов: ${clarifyingQuestion}`);
-    caseRef.partialEntities = defectItem.entities;
-    const historyRow = {
-      question: originalText,
-      answer: clarifyingQuestion,
-      refs: [],
-      sources: [],
-      internal: defectItem,
-      at: now(),
-      status: "need_clarification",
-    };
-    caseRef.history.push(historyRow);
-    caseRef.preview = clarifyingQuestion;
+async function processDefectItem(originalText, normalizedText, partText, caseRef) {
+  const entities = NERModel.extract(partText);
+  const clarify = buildClarifyingQuestion(entities);
+  if (clarify) {
+    await typeText(resultBody, `Ищу информацию.\n\nПока не перехожу к поиску нормативов: ${clarify}`);
+    caseRef.partialEntities = entities;
+    caseRef.history.push({ question: originalText, answer: clarify, entities, at: now(), status: "need_clarification" });
+    caseRef.preview = clarify;
     persistAll();
     renderCases();
     return;
   }
 
-  let sources = [];
-  try {
-    sources = await searchTrustedSourcesRealtime(defectItem.technicalCore, defectItem.normativeSectionHint);
-  } catch {
-    await typeText(resultBody, "Ищу информацию.\n\nНе удалось выполнить realtime-поиск по нормативным источникам. Повторите запрос позже.");
+  const classProbs = classifier.classify(entities, partText);
+  const topClass = classProbs[0]?.label || "недостаточно данных";
+  const sectionHint = /(протеч|стояк|кровл|гидроизоляц)/.test(partText.toLowerCase())
+    ? "СП/СНиП по инженерным системам и гидроизоляции"
+    : /(промерзан|конденсат|плесень|окон|откос)/.test(partText.toLowerCase())
+      ? "ГОСТ/СП по тепловой защите и узлам примыкания"
+      : /(трещин|деформац)/.test(partText.toLowerCase())
+        ? "СП/СНиП/ГОСТ по конструкциям"
+        : "общие требования к качеству строительных работ";
+
+  const ingested = await retrieveNormativeChunksRealtime(partText, sectionHint, caseRef.id);
+  const queryVec = NLPEngine.encode(partText);
+  const retrieved = vectorStore.search(queryVec, caseRef.id, 6).filter((r) => ingested.some((i) => i.id === r.id) || r.score > 0.15);
+
+  if (!retrieved.length) {
+    await typeText(resultBody, "Ищу информацию.\n\nНе удалось получить нормативные фрагменты с достаточной релевантностью. Уточните технические признаки дефекта.");
     return;
   }
 
-  if (!sources.length) {
-    await typeText(resultBody, "Ищу информацию.\n\nПроверяемые нормативные источники не найдены. Уточните описание дефекта и место возникновения.");
-    return;
-  }
-
-  const refs = extractNormativeRefs(sources);
-  updateLearningMap(defectItem, refs);
-  const answer = buildTechnicalAnswer(originalText, normalizedText, defectItem, sources, refs);
+  const refs = extractNormativeRefs(retrieved);
+  updateLearningMap(topClass, sectionHint, refs);
+  const answer = buildTechnicalAnswer(originalText, normalizedText, entities, classProbs, refs, retrieved);
   await typeText(resultBody, answer);
 
-  const historyRow = {
+  caseRef.embedding = queryVec;
+  caseRef.history.push({
     question: originalText,
     answer,
     refs,
-    sources,
-    internal: defectItem,
+    entities,
+    topClass,
+    classProbs,
+    retrieved: retrieved.map((r) => ({ sourceTitle: r.sourceTitle, sourceUrl: r.sourceUrl, score: r.score })),
     at: now(),
     status: "analyzed",
-  };
+  });
 
-  caseRef.history.push(historyRow);
   caseRef.preview = answer.slice(0, 130) + (answer.length > 130 ? "..." : "");
   persistAll();
   renderCases();
@@ -433,24 +495,37 @@ async function processOneDefectItem(originalText, normalizedText, defectItem, ca
 async function processQuestion(text, caseRef) {
   resultBody.innerHTML = `<div class="status-line">Ищу информацию.</div>`;
 
-  const nlp = nlpPreprocessUserText(text);
+  const nlp = NLPEngine.preprocess(text);
+  const parts = nlp.parts;
 
-  // if multiple defects in one text, split to child defect items and process first one now
-  caseRef.detectedItems = nlp.defectItems.map((d) => ({
-    core: d.technicalCore,
-    class: d.defectClass,
-    object: d.entities.objectType,
-    nature: d.entities.defectNature,
-  }));
-
-  if (nlp.defectItems.length > 1) {
-    caseRef.preview = `Выделено ${nlp.defectItems.length} дефектов, начат анализ первого.`;
+  if (parts.length > 1) {
+    // multi-defect message -> create additional sibling cases
+    caseRef.preview = `Обнаружено ${parts.length} дефектов; анализируется каждый отдельно.`;
     persistAll();
     renderCases();
+
+    const first = parts[0];
+    await processDefectItem(text, nlp.normalizedTechnicalText, first, caseRef);
+
+    for (let i = 1; i < parts.length; i += 1) {
+      const sub = {
+        id: crypto.randomUUID(),
+        createdAt: now(),
+        problem: parts[i],
+        preview: "",
+        history: [],
+        partialEntities: null,
+        parentCaseId: caseRef.id,
+      };
+      cases.unshift(sub);
+      await processDefectItem(parts[i], parts[i], parts[i], sub);
+    }
+  } else {
+    await processDefectItem(text, nlp.normalizedTechnicalText, parts[0], caseRef);
   }
 
-  // analyze first defect item; follow-ups can continue same case context
-  await processOneDefectItem(text, nlp.normalizedTechnicalText, nlp.defectItems[0], caseRef);
+  persistAll();
+  renderCases();
 }
 
 analyzeBtn.addEventListener("click", async () => {
@@ -463,8 +538,8 @@ analyzeBtn.addEventListener("click", async () => {
     problem: text,
     preview: "",
     history: [],
-    detectedItems: [],
     partialEntities: null,
+    embedding: null,
   };
   cases.unshift(newCase);
   selectCase(newCase.id);
@@ -485,4 +560,25 @@ followupBtn.addEventListener("click", async () => {
   followupInput.value = "";
 });
 
+confirmBtn.addEventListener("click", () => {
+  if (!selectedCaseId) return;
+  const caseRef = cases.find((c) => c.id === selectedCaseId);
+  if (!caseRef?.history?.length) return;
+  const topLabel = caseRef.history[caseRef.history.length - 1].topClass;
+  if (!topLabel) return;
+  classifier.updateWithFeedback(topLabel, true);
+  persistAll();
+});
+
+rejectBtn.addEventListener("click", () => {
+  if (!selectedCaseId) return;
+  const caseRef = cases.find((c) => c.id === selectedCaseId);
+  if (!caseRef?.history?.length) return;
+  const topLabel = caseRef.history[caseRef.history.length - 1].topClass;
+  if (!topLabel) return;
+  classifier.updateWithFeedback(topLabel, false);
+  persistAll();
+});
+
+setCaseControlsEnabled(false);
 renderCases();

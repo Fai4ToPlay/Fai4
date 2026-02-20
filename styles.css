@@ -58,6 +58,7 @@ h1 { margin: 0; font-size: 24px; }
 label { display:block; margin-bottom:8px; color: var(--muted); font-size: 14px; }
 .follow-label { margin-top: 12px; }
 .input-row { display:flex; gap: 8px; }
+.feedback-row { margin-top: 10px; }
 
 input {
   width:100%;
