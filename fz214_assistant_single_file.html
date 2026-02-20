@@ -14,11 +14,9 @@
   --muted: #76717a;
   --line: #f3e1cf;
   --orange: #ff8a1f;
-  --orange-soft: #ffead6;
 }
 
 * { box-sizing: border-box; }
-
 body {
   margin: 0;
   font-family: 'Montserrat', system-ui, sans-serif;
@@ -27,114 +25,92 @@ body {
 }
 
 .top-nav {
-  position: sticky;
-  top: 0;
-  z-index: 10;
   background: #fff;
   border-bottom: 1px solid var(--line);
   padding: 14px 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
-
-.logo-wrap { display: flex; align-items: center; gap: 10px; }
+.logo-wrap { display:flex; align-items:center; gap:10px; }
 .logo {
-  width: 38px; height: 38px; border-radius: 10px;
-  display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--orange), #ff9f3d);
-  color: #fff; font-weight: 700;
+  width: 38px; height: 38px; border-radius: 10px; display:grid; place-items:center;
+  background: linear-gradient(135deg, var(--orange), #ff9f3d); color:#fff; font-weight:700;
 }
-
-.top-nav h1 { margin: 0; font-size: 24px; }
-
-button {
-  font-family: 'Montserrat', system-ui, sans-serif;
-  border: none;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--orange), #ff9f3d);
-  color: #fff;
-  padding: 10px 14px;
-  cursor: pointer;
-  transition: transform .2s ease, box-shadow .2s ease;
-}
-button:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(255, 138, 31, .25); }
-
-.cases-btn { min-width: 110px; }
+h1 { margin: 0; font-size: 24px; }
 
 .main-wrap {
-  max-width: 1100px;
-  margin: 22px auto;
+  max-width: 1300px;
+  margin: 20px auto;
   padding: 0 18px 22px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
   gap: 14px;
 }
 
-.answer-card,
-.input-card {
+.left-column, .right-column { min-width: 0; }
+.answer-card, .input-card, .cases-card {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 18px;
   box-shadow: 0 10px 28px rgba(255, 138, 31, .08);
 }
 
-.answer-card { min-height: 460px; padding: 18px; }
+.answer-card { min-height: 480px; padding: 18px; }
 .result-text {
   font-family: 'Montserrat', system-ui, sans-serif;
   white-space: pre-wrap;
   line-height: 1.65;
-  font-size: 16px;
+  font-size: 15px;
 }
 
-.input-card { padding: 14px; }
-.input-card label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 14px; }
-.input-row { display: flex; gap: 8px; }
+.input-card { margin-top: 12px; padding: 14px; }
+label { display:block; margin-bottom:8px; color: var(--muted); font-size: 14px; }
+.follow-label { margin-top: 12px; }
+.input-row { display:flex; gap: 8px; }
+
 input {
-  width: 100%;
+  width:100%;
   font-family: 'Montserrat', system-ui, sans-serif;
   border: 1px solid #efdcc8;
   border-radius: 12px;
   padding: 12px;
-  font-size: 15px;
+  font-size: 14px;
 }
-input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 4px rgba(255, 138, 31, .15); }
+input:focus { outline:none; border-color: var(--orange); box-shadow: 0 0 0 4px rgba(255, 138, 31, .15); }
+input:disabled { background:#f8f8f8; color:#9d9d9d; }
 
-.cases-panel {
-  position: fixed;
-  right: 18px;
-  top: 82px;
-  width: min(420px, 92vw);
-  max-height: 76vh;
-  overflow: auto;
-  padding: 14px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: 0 20px 36px rgba(0,0,0,.12);
+button {
+  font-family: 'Montserrat', system-ui, sans-serif;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--orange), #ff9f3d);
+  color:#fff;
+  padding: 10px 14px;
+  cursor: pointer;
 }
-.hidden { display: none; }
+button:disabled { opacity: .55; cursor: not-allowed; }
 
-.cases-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.cases-head h2 { margin: 0; font-size: 18px; }
+.meta { margin: 10px 2px 0; color: var(--muted); font-size: 12px; }
 
-#cases { display: grid; gap: 10px; }
+.cases-card { padding: 14px; max-height: 740px; overflow: auto; }
+.cases-card h2 { margin: 4px 0 10px; }
+#cases { display:grid; gap:10px; }
 .case {
   border: 1px solid #f1e2d2;
   border-radius: 12px;
   padding: 10px;
   background: #fffaf4;
+  cursor: pointer;
 }
-.meta { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.case.active { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 138, 31, .15); }
+.case p { margin: 6px 0 0; color:#4a4a52; }
 
 .status-line {
   color: #a6621e;
   font-weight: 600;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 1050px) {
+  .main-wrap { grid-template-columns: 1fr; }
 }
 
 </style>
@@ -145,41 +121,50 @@ input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 4px 
         <div class="logo">FB</div>
         <h1>FerrumBot</h1>
       </div>
-      <button id="casesToggleBtn" class="cases-btn">Кейсы</button>
     </header>
 
-    <aside id="casesPanel" class="cases-panel hidden">
-      <div class="cases-head">
-        <h2>Проработанные кейсы</h2>
-        <button id="closeCasesBtn">Закрыть</button>
-      </div>
-      <div id="cases"></div>
-    </aside>
-
     <main class="main-wrap">
-      <section class="answer-card">
-        <div id="resultBody" class="result-text">Введите запрос внизу, и FerrumBot подготовит ответ после проверки по источникам.</div>
+      <section class="left-column">
+        <section class="answer-card">
+          <div id="resultBody" class="result-text">Введите проблему. После запуска FerrumBot покажет ответ в этом окне.</div>
+        </section>
+
+        <section class="input-card">
+          <label for="problemInput">Новый кейс: описание проблемы</label>
+          <div class="input-row">
+            <input id="problemInput" type="text" placeholder="Например: Протечка стояка в санузле после передачи квартиры" />
+            <button id="analyzeBtn">Найти ответ</button>
+          </div>
+
+          <label for="followupInput" class="follow-label">Продолжение диалога по выбранному кейсу</label>
+          <div class="input-row">
+            <input id="followupInput" type="text" placeholder="Выберите кейс справа, чтобы уточнить вопрос" disabled />
+            <button id="followupBtn" disabled>Уточнить</button>
+          </div>
+          <p id="activeCaseInfo" class="meta">Активный кейс: не выбран.</p>
+        </section>
       </section>
 
-      <section class="input-card">
-        <label for="problemInput">Опишите проблему</label>
-        <div class="input-row">
-          <input id="problemInput" type="text" placeholder="Например: Протечка стояка в санузле после передачи квартиры" />
-          <button id="analyzeBtn">Найти ответ</button>
-        </div>
-      </section>
+      <aside class="right-column">
+        <section class="cases-card">
+          <h2>Кейсы</h2>
+          <div id="cases"></div>
+        </section>
+      </aside>
     </main>
 
     <script>
-const STORAGE_CASES_KEY = "ferrumbot_cases_v5";
+const STORAGE_CASES_KEY = "ferrumbot_cases_v6";
 
 const problemInput = document.getElementById("problemInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const resultBody = document.getElementById("resultBody");
 const casesContainer = document.getElementById("cases");
-const casesPanel = document.getElementById("casesPanel");
-const casesToggleBtn = document.getElementById("casesToggleBtn");
-const closeCasesBtn = document.getElementById("closeCasesBtn");
+const followupInput = document.getElementById("followupInput");
+const followupBtn = document.getElementById("followupBtn");
+const activeCaseInfo = document.getElementById("activeCaseInfo");
+
+const SYSTEM_PROMPT = `Ты — интеллектуальная система анализа дефектов и нормативной практики с возможностью динамического обучения в момент запроса. Система выполняет поиск по открытым источникам и формирует обоснованные выводы. Ответ содержит: Краткий вывод, Нормативная база, Анализ источников, Обоснованный итог.`;
 
 const TRUSTED_DOMAINS = [
   "consultant.ru",
@@ -194,6 +179,7 @@ const TRUSTED_DOMAINS = [
 ];
 
 let cases = readJson(STORAGE_CASES_KEY, []);
+let selectedCaseId = null;
 
 function readJson(key, fallback) {
   try {
@@ -214,8 +200,7 @@ function now() {
 
 function normalizeUrl(url) {
   try {
-    const u = new URL(url);
-    return u.href;
+    return new URL(url).href;
   } catch {
     return null;
   }
@@ -224,7 +209,7 @@ function normalizeUrl(url) {
 function isTrusted(url) {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "");
-    return TRUSTED_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+    return TRUSTED_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
   } catch {
     return false;
   }
@@ -236,70 +221,78 @@ function extractLinksFromMarkdown(text) {
   let match = regex.exec(text);
   while (match) {
     const title = match[1].trim();
-    const rawUrl = normalizeUrl(match[2]);
-    if (rawUrl && isTrusted(rawUrl)) {
-      links.push({ title, url: rawUrl });
-    }
+    const url = normalizeUrl(match[2]);
+    if (url && isTrusted(url)) links.push({ title, url });
     match = regex.exec(text);
   }
   return links;
 }
 
 async function fetchAsText(url) {
-  const response = await fetch(url, { method: "GET" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.text();
+  const res = await fetch(url, { method: "GET" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
 }
 
-async function searchTrustedSourcesRealtime(problemText) {
-  const query = encodeURIComponent(`${problemText} строительные нормы СП ГОСТ судебная практика`);
-  const ddgProxyUrl = `https://r.jina.ai/http://duckduckgo.com/html/?q=${query}`;
+async function searchTrustedSourcesRealtime(searchText) {
+  const query = encodeURIComponent(`${searchText} строительные нормы СП ГОСТ судебная практика`);
+  const searchRaw = await fetchAsText(`https://r.jina.ai/http://duckduckgo.com/html/?q=${query}`);
 
-  const searchRaw = await fetchAsText(ddgProxyUrl);
   const links = extractLinksFromMarkdown(searchRaw)
     .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx)
-    .slice(0, 6);
+    .slice(0, 8);
 
   const resolved = [];
   for (const item of links) {
     try {
-      const page = await fetchAsText(`https://r.jina.ai/http://${item.url.replace(/^https?:\/\//, "")}`);
-      const clean = page.replace(/\s+/g, " ").trim();
-      const snippet = clean.slice(0, 650);
-      if (snippet.length > 180) {
-        resolved.push({ ...item, snippet });
-      }
+      const text = await fetchAsText(`https://r.jina.ai/http://${item.url.replace(/^https?:\/\//, "")}`);
+      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 700);
+      if (snippet.length > 180) resolved.push({ ...item, snippet });
     } catch {
-      // skip failed source
+      // skip source fetch errors
     }
-    if (resolved.length >= 3) break;
+    if (resolved.length >= 4) break;
   }
-
   return resolved;
 }
 
-function buildNarrative(problemText, sources) {
+function selectCase(caseId) {
+  selectedCaseId = caseId;
+  const selected = cases.find((c) => c.id === caseId);
+  followupInput.disabled = !selected;
+  followupBtn.disabled = !selected;
+  activeCaseInfo.textContent = selected
+    ? `Активный кейс: ${selected.problem.slice(0, 90)}`
+    : "Активный кейс: не выбран.";
+  if (selected?.history?.length) {
+    resultBody.textContent = selected.history[selected.history.length - 1].answer;
+  }
+  renderCases();
+}
+
+function buildStructuredAnswer(searchText, sources) {
   const sourceNames = sources.map((s) => s.title).join("; ");
   const sourceLinks = sources.map((s) => `- ${s.title}: ${s.url}`).join("\n");
   const evidence = sources.map((s, i) => `Источник ${i + 1}: ${s.snippet}`).join("\n\n");
 
-  const base = `По вашему запросу «${problemText}» FerrumBot выполнил поиск в реальном времени по открытым источникам и сформировал вывод только по данным, которые удалось получить на текущий момент из доверенных доменов. На основании найденных материалов ключевой фокус проверки лежит в зоне соответствия выполненных работ действующим нормам качества, правильности технических узлов и причинно-следственной связи между дефектом и действиями сторон.`;
+  const short = `По запросу «${searchText}» выполнен анализ открытых источников в реальном времени. Вывод сформирован только по найденным в текущей сессии данным из доверенных доменов.`;
+  const norms = `В анализ включены материалы из нормативных и правоприменительных источников: ${sourceNames}. Приоритет отдан действующим НПА, строительным нормам и официальным судебным/государственным ресурсам.`;
+  const analysis = `Найденные материалы указывают, что для определения виновной стороны ключевое значение имеет подтверждение причины дефекта актом осмотра и технической фиксацией. При противоречивых позициях больший юридический вес имеют федеральные законы и официальные документы судов/госорганов.`;
+  const final = `Итог квалифицирован как предварительный до получения документальных доказательств по объекту. Для однозначного решения нужно добавить дату передачи, дату обнаружения, сведения о вмешательствах, фотофиксацию и при необходимости экспертное обследование.`;
 
-  const legal = `Нормативная и правоприменительная база в данной выборке опирается на следующие источники: ${sourceNames}. При наличии расхождений между позициями приоритет отдается нормам закона и официальным судебным/государственным источникам, а не вторичным публикациям.`;
-
-  const analysis = `Сопоставление найденных данных показывает, что вопрос о виновной стороне решается через подтверждение происхождения дефекта: если дефект обусловлен несоответствием строительных/монтажных решений нормативным требованиям, ответственность возлагается на исполнителя работ; если подтверждается вмешательство, нештатная эксплуатация или механическое повреждение после передачи, ответственность смещается на пользователя помещения. Для юридически устойчивого результата необходимы акт осмотра, фотофиксация, хронология возникновения дефекта и, при споре, независимое техническое обследование.`;
-
-  const final = `Итоговое решение по текущему запросу формируется как предварительное экспертное заключение с опорой на найденные в реальном времени источники. Для окончательного определения виновной стороны и способа устранения дефекта требуется документальная верификация фактов на объекте. Если предоставите акт осмотра, даты передачи/обнаружения и фото дефекта, FerrumBot обновит вывод более предметно и точно.`;
-
-  return `Краткий вывод.\n\n${base}\n\nНормативная база.\n\n${legal}\n\nАнализ источников.\n\n${analysis}\n\nФрагменты источников (realtime-выборка).\n\n${evidence}\n\nСсылки на использованные источники.\n${sourceLinks}\n\nОбоснованный итог.\n\n${final}`;
+  return `Краткий вывод.\n\n${short}\n\nНормативная база.\n\n${norms}\n\nАнализ источников.\n\n${analysis}\n\nФактические фрагменты найденных источников.\n\n${evidence}\n\nСсылки на использованные источники.\n${sourceLinks}\n\nОбоснованный итог.\n\n${final}`;
 }
 
 async function typeText(element, text, speed = 8) {
   element.textContent = "";
   for (let i = 0; i < text.length; i += 1) {
     element.textContent += text[i];
-    await new Promise((resolve) => setTimeout(resolve, speed));
+    await new Promise((r) => setTimeout(r, speed));
   }
+}
+
+function getCasePreview(text) {
+  return text.replace(/\s+/g, " ").trim().slice(0, 95);
 }
 
 function renderCases() {
@@ -309,55 +302,81 @@ function renderCases() {
   }
 
   casesContainer.innerHTML = cases
-    .map(
-      (item) => `
-      <div class="case">
-        <div class="meta">${item.createdAt}</div>
-        <strong>${item.problem}</strong>
-        <p>${item.preview}</p>
-      </div>
-    `,
-    )
+    .map((item) => {
+      const activeClass = item.id === selectedCaseId ? "active" : "";
+      const shortDefect = getCasePreview(item.problem);
+      return `
+        <div class="case ${activeClass}" data-id="${item.id}">
+          <div class="meta">${item.createdAt}</div>
+          <strong>${shortDefect}</strong>
+          <p>${item.preview}</p>
+        </div>
+      `;
+    })
     .join("");
+
+  casesContainer.querySelectorAll(".case").forEach((node) => {
+    node.addEventListener("click", () => selectCase(node.dataset.id));
+  });
 }
 
-analyzeBtn.addEventListener("click", async () => {
-  const text = problemInput.value.trim();
-  if (!text) return;
-
-  resultBody.innerHTML = `<div class="status-line">FerrumBot выполняет realtime-поиск по открытым источникам...</div>`;
+async function processQuestion(text, caseRef) {
+  resultBody.innerHTML = `<div class="status-line">Ищу информацию.</div>`;
 
   let sources = [];
   try {
     sources = await searchTrustedSourcesRealtime(text);
   } catch {
     resultBody.textContent =
-      "Не удалось получить данные из открытых источников в реальном времени. Повторите запрос или проверьте сетевое подключение.";
-    return;
+      "Не удалось получить данные из открытых источников в реальном времени. Повторите запрос позже.";
+    return null;
   }
 
   if (!sources.length) {
     resultBody.textContent =
-      "По запросу не удалось извлечь проверяемые данные из доверенных открытых источников. Уточните формулировку (тип дефекта, место, срок, обстоятельства).";
-    return;
+      "Проверяемые источники не найдены. Уточните формулировку: укажите тип дефекта, место, срок и обстоятельства.";
+    return null;
   }
 
-  const full = buildNarrative(text, sources);
-  await typeText(resultBody, full);
+  const answer = buildStructuredAnswer(text, sources);
+  await typeText(resultBody, answer);
 
-  const preview = full.slice(0, 180) + (full.length > 180 ? "..." : "");
-  cases.unshift({ createdAt: now(), problem: text, preview, fullText: full, sources });
-  cases = cases.slice(0, 50);
+  const historyRow = { question: text, answer, sources, at: now(), prompt: SYSTEM_PROMPT };
+  caseRef.history.push(historyRow);
+  caseRef.preview = answer.slice(0, 140) + (answer.length > 140 ? "..." : "");
   persistCases();
   renderCases();
+  return historyRow;
+}
+
+analyzeBtn.addEventListener("click", async () => {
+  const text = problemInput.value.trim();
+  if (!text) return;
+
+  const newCase = {
+    id: crypto.randomUUID(),
+    createdAt: now(),
+    problem: text,
+    preview: "",
+    history: [],
+  };
+  cases.unshift(newCase);
+  selectCase(newCase.id);
+  await processQuestion(text, newCase);
+  problemInput.value = "";
 });
 
-casesToggleBtn.addEventListener("click", () => {
-  casesPanel.classList.toggle("hidden");
-});
+followupBtn.addEventListener("click", async () => {
+  if (!selectedCaseId) return;
+  const text = followupInput.value.trim();
+  if (!text) return;
 
-closeCasesBtn.addEventListener("click", () => {
-  casesPanel.classList.add("hidden");
+  const caseRef = cases.find((c) => c.id === selectedCaseId);
+  if (!caseRef) return;
+
+  const contextualText = `${caseRef.problem}. Уточнение: ${text}`;
+  await processQuestion(contextualText, caseRef);
+  followupInput.value = "";
 });
 
 renderCases();

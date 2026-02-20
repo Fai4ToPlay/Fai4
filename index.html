@@ -12,29 +12,36 @@
         <div class="logo">FB</div>
         <h1>FerrumBot</h1>
       </div>
-      <button id="casesToggleBtn" class="cases-btn">Кейсы</button>
     </header>
 
-    <aside id="casesPanel" class="cases-panel hidden">
-      <div class="cases-head">
-        <h2>Проработанные кейсы</h2>
-        <button id="closeCasesBtn">Закрыть</button>
-      </div>
-      <div id="cases"></div>
-    </aside>
-
     <main class="main-wrap">
-      <section class="answer-card">
-        <div id="resultBody" class="result-text">Введите запрос внизу, и FerrumBot подготовит ответ после проверки по источникам.</div>
+      <section class="left-column">
+        <section class="answer-card">
+          <div id="resultBody" class="result-text">Введите проблему. После запуска FerrumBot покажет ответ в этом окне.</div>
+        </section>
+
+        <section class="input-card">
+          <label for="problemInput">Новый кейс: описание проблемы</label>
+          <div class="input-row">
+            <input id="problemInput" type="text" placeholder="Например: Протечка стояка в санузле после передачи квартиры" />
+            <button id="analyzeBtn">Найти ответ</button>
+          </div>
+
+          <label for="followupInput" class="follow-label">Продолжение диалога по выбранному кейсу</label>
+          <div class="input-row">
+            <input id="followupInput" type="text" placeholder="Выберите кейс справа, чтобы уточнить вопрос" disabled />
+            <button id="followupBtn" disabled>Уточнить</button>
+          </div>
+          <p id="activeCaseInfo" class="meta">Активный кейс: не выбран.</p>
+        </section>
       </section>
 
-      <section class="input-card">
-        <label for="problemInput">Опишите проблему</label>
-        <div class="input-row">
-          <input id="problemInput" type="text" placeholder="Например: Протечка стояка в санузле после передачи квартиры" />
-          <button id="analyzeBtn">Найти ответ</button>
-        </div>
-      </section>
+      <aside class="right-column">
+        <section class="cases-card">
+          <h2>Кейсы</h2>
+          <div id="cases"></div>
+        </section>
+      </aside>
     </main>
 
     <script src="app.js"></script>

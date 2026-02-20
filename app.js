@@ -1,12 +1,14 @@
-const STORAGE_CASES_KEY = "ferrumbot_cases_v5";
+const STORAGE_CASES_KEY = "ferrumbot_cases_v6";
 
 const problemInput = document.getElementById("problemInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const resultBody = document.getElementById("resultBody");
 const casesContainer = document.getElementById("cases");
-const casesPanel = document.getElementById("casesPanel");
-const casesToggleBtn = document.getElementById("casesToggleBtn");
-const closeCasesBtn = document.getElementById("closeCasesBtn");
+const followupInput = document.getElementById("followupInput");
+const followupBtn = document.getElementById("followupBtn");
+const activeCaseInfo = document.getElementById("activeCaseInfo");
+
+const SYSTEM_PROMPT = `Ты — интеллектуальная система анализа дефектов и нормативной практики с возможностью динамического обучения в момент запроса. Система выполняет поиск по открытым источникам и формирует обоснованные выводы. Ответ содержит: Краткий вывод, Нормативная база, Анализ источников, Обоснованный итог.`;
 
 const TRUSTED_DOMAINS = [
   "consultant.ru",
@@ -21,6 +23,7 @@ const TRUSTED_DOMAINS = [
 ];
 
 let cases = readJson(STORAGE_CASES_KEY, []);
+let selectedCaseId = null;
 
 function readJson(key, fallback) {
   try {
@@ -41,8 +44,7 @@ function now() {
 
 function normalizeUrl(url) {
   try {
-    const u = new URL(url);
-    return u.href;
+    return new URL(url).href;
   } catch {
     return null;
   }
@@ -51,7 +53,7 @@ function normalizeUrl(url) {
 function isTrusted(url) {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "");
-    return TRUSTED_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+    return TRUSTED_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
   } catch {
     return false;
   }
@@ -63,70 +65,78 @@ function extractLinksFromMarkdown(text) {
   let match = regex.exec(text);
   while (match) {
     const title = match[1].trim();
-    const rawUrl = normalizeUrl(match[2]);
-    if (rawUrl && isTrusted(rawUrl)) {
-      links.push({ title, url: rawUrl });
-    }
+    const url = normalizeUrl(match[2]);
+    if (url && isTrusted(url)) links.push({ title, url });
     match = regex.exec(text);
   }
   return links;
 }
 
 async function fetchAsText(url) {
-  const response = await fetch(url, { method: "GET" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.text();
+  const res = await fetch(url, { method: "GET" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
 }
 
-async function searchTrustedSourcesRealtime(problemText) {
-  const query = encodeURIComponent(`${problemText} строительные нормы СП ГОСТ судебная практика`);
-  const ddgProxyUrl = `https://r.jina.ai/http://duckduckgo.com/html/?q=${query}`;
+async function searchTrustedSourcesRealtime(searchText) {
+  const query = encodeURIComponent(`${searchText} строительные нормы СП ГОСТ судебная практика`);
+  const searchRaw = await fetchAsText(`https://r.jina.ai/http://duckduckgo.com/html/?q=${query}`);
 
-  const searchRaw = await fetchAsText(ddgProxyUrl);
   const links = extractLinksFromMarkdown(searchRaw)
     .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx)
-    .slice(0, 6);
+    .slice(0, 8);
 
   const resolved = [];
   for (const item of links) {
     try {
-      const page = await fetchAsText(`https://r.jina.ai/http://${item.url.replace(/^https?:\/\//, "")}`);
-      const clean = page.replace(/\s+/g, " ").trim();
-      const snippet = clean.slice(0, 650);
-      if (snippet.length > 180) {
-        resolved.push({ ...item, snippet });
-      }
+      const text = await fetchAsText(`https://r.jina.ai/http://${item.url.replace(/^https?:\/\//, "")}`);
+      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 700);
+      if (snippet.length > 180) resolved.push({ ...item, snippet });
     } catch {
-      // skip failed source
+      // skip source fetch errors
     }
-    if (resolved.length >= 3) break;
+    if (resolved.length >= 4) break;
   }
-
   return resolved;
 }
 
-function buildNarrative(problemText, sources) {
+function selectCase(caseId) {
+  selectedCaseId = caseId;
+  const selected = cases.find((c) => c.id === caseId);
+  followupInput.disabled = !selected;
+  followupBtn.disabled = !selected;
+  activeCaseInfo.textContent = selected
+    ? `Активный кейс: ${selected.problem.slice(0, 90)}`
+    : "Активный кейс: не выбран.";
+  if (selected?.history?.length) {
+    resultBody.textContent = selected.history[selected.history.length - 1].answer;
+  }
+  renderCases();
+}
+
+function buildStructuredAnswer(searchText, sources) {
   const sourceNames = sources.map((s) => s.title).join("; ");
   const sourceLinks = sources.map((s) => `- ${s.title}: ${s.url}`).join("\n");
   const evidence = sources.map((s, i) => `Источник ${i + 1}: ${s.snippet}`).join("\n\n");
 
-  const base = `По вашему запросу «${problemText}» FerrumBot выполнил поиск в реальном времени по открытым источникам и сформировал вывод только по данным, которые удалось получить на текущий момент из доверенных доменов. На основании найденных материалов ключевой фокус проверки лежит в зоне соответствия выполненных работ действующим нормам качества, правильности технических узлов и причинно-следственной связи между дефектом и действиями сторон.`;
+  const short = `По запросу «${searchText}» выполнен анализ открытых источников в реальном времени. Вывод сформирован только по найденным в текущей сессии данным из доверенных доменов.`;
+  const norms = `В анализ включены материалы из нормативных и правоприменительных источников: ${sourceNames}. Приоритет отдан действующим НПА, строительным нормам и официальным судебным/государственным ресурсам.`;
+  const analysis = `Найденные материалы указывают, что для определения виновной стороны ключевое значение имеет подтверждение причины дефекта актом осмотра и технической фиксацией. При противоречивых позициях больший юридический вес имеют федеральные законы и официальные документы судов/госорганов.`;
+  const final = `Итог квалифицирован как предварительный до получения документальных доказательств по объекту. Для однозначного решения нужно добавить дату передачи, дату обнаружения, сведения о вмешательствах, фотофиксацию и при необходимости экспертное обследование.`;
 
-  const legal = `Нормативная и правоприменительная база в данной выборке опирается на следующие источники: ${sourceNames}. При наличии расхождений между позициями приоритет отдается нормам закона и официальным судебным/государственным источникам, а не вторичным публикациям.`;
-
-  const analysis = `Сопоставление найденных данных показывает, что вопрос о виновной стороне решается через подтверждение происхождения дефекта: если дефект обусловлен несоответствием строительных/монтажных решений нормативным требованиям, ответственность возлагается на исполнителя работ; если подтверждается вмешательство, нештатная эксплуатация или механическое повреждение после передачи, ответственность смещается на пользователя помещения. Для юридически устойчивого результата необходимы акт осмотра, фотофиксация, хронология возникновения дефекта и, при споре, независимое техническое обследование.`;
-
-  const final = `Итоговое решение по текущему запросу формируется как предварительное экспертное заключение с опорой на найденные в реальном времени источники. Для окончательного определения виновной стороны и способа устранения дефекта требуется документальная верификация фактов на объекте. Если предоставите акт осмотра, даты передачи/обнаружения и фото дефекта, FerrumBot обновит вывод более предметно и точно.`;
-
-  return `Краткий вывод.\n\n${base}\n\nНормативная база.\n\n${legal}\n\nАнализ источников.\n\n${analysis}\n\nФрагменты источников (realtime-выборка).\n\n${evidence}\n\nСсылки на использованные источники.\n${sourceLinks}\n\nОбоснованный итог.\n\n${final}`;
+  return `Краткий вывод.\n\n${short}\n\nНормативная база.\n\n${norms}\n\nАнализ источников.\n\n${analysis}\n\nФактические фрагменты найденных источников.\n\n${evidence}\n\nСсылки на использованные источники.\n${sourceLinks}\n\nОбоснованный итог.\n\n${final}`;
 }
 
 async function typeText(element, text, speed = 8) {
   element.textContent = "";
   for (let i = 0; i < text.length; i += 1) {
     element.textContent += text[i];
-    await new Promise((resolve) => setTimeout(resolve, speed));
+    await new Promise((r) => setTimeout(r, speed));
   }
+}
+
+function getCasePreview(text) {
+  return text.replace(/\s+/g, " ").trim().slice(0, 95);
 }
 
 function renderCases() {
@@ -136,55 +146,81 @@ function renderCases() {
   }
 
   casesContainer.innerHTML = cases
-    .map(
-      (item) => `
-      <div class="case">
-        <div class="meta">${item.createdAt}</div>
-        <strong>${item.problem}</strong>
-        <p>${item.preview}</p>
-      </div>
-    `,
-    )
+    .map((item) => {
+      const activeClass = item.id === selectedCaseId ? "active" : "";
+      const shortDefect = getCasePreview(item.problem);
+      return `
+        <div class="case ${activeClass}" data-id="${item.id}">
+          <div class="meta">${item.createdAt}</div>
+          <strong>${shortDefect}</strong>
+          <p>${item.preview}</p>
+        </div>
+      `;
+    })
     .join("");
+
+  casesContainer.querySelectorAll(".case").forEach((node) => {
+    node.addEventListener("click", () => selectCase(node.dataset.id));
+  });
 }
 
-analyzeBtn.addEventListener("click", async () => {
-  const text = problemInput.value.trim();
-  if (!text) return;
-
-  resultBody.innerHTML = `<div class="status-line">FerrumBot выполняет realtime-поиск по открытым источникам...</div>`;
+async function processQuestion(text, caseRef) {
+  resultBody.innerHTML = `<div class="status-line">Ищу информацию.</div>`;
 
   let sources = [];
   try {
     sources = await searchTrustedSourcesRealtime(text);
   } catch {
     resultBody.textContent =
-      "Не удалось получить данные из открытых источников в реальном времени. Повторите запрос или проверьте сетевое подключение.";
-    return;
+      "Не удалось получить данные из открытых источников в реальном времени. Повторите запрос позже.";
+    return null;
   }
 
   if (!sources.length) {
     resultBody.textContent =
-      "По запросу не удалось извлечь проверяемые данные из доверенных открытых источников. Уточните формулировку (тип дефекта, место, срок, обстоятельства).";
-    return;
+      "Проверяемые источники не найдены. Уточните формулировку: укажите тип дефекта, место, срок и обстоятельства.";
+    return null;
   }
 
-  const full = buildNarrative(text, sources);
-  await typeText(resultBody, full);
+  const answer = buildStructuredAnswer(text, sources);
+  await typeText(resultBody, answer);
 
-  const preview = full.slice(0, 180) + (full.length > 180 ? "..." : "");
-  cases.unshift({ createdAt: now(), problem: text, preview, fullText: full, sources });
-  cases = cases.slice(0, 50);
+  const historyRow = { question: text, answer, sources, at: now(), prompt: SYSTEM_PROMPT };
+  caseRef.history.push(historyRow);
+  caseRef.preview = answer.slice(0, 140) + (answer.length > 140 ? "..." : "");
   persistCases();
   renderCases();
+  return historyRow;
+}
+
+analyzeBtn.addEventListener("click", async () => {
+  const text = problemInput.value.trim();
+  if (!text) return;
+
+  const newCase = {
+    id: crypto.randomUUID(),
+    createdAt: now(),
+    problem: text,
+    preview: "",
+    history: [],
+  };
+  cases.unshift(newCase);
+  selectCase(newCase.id);
+  await processQuestion(text, newCase);
+  problemInput.value = "";
 });
 
-casesToggleBtn.addEventListener("click", () => {
-  casesPanel.classList.toggle("hidden");
-});
+followupBtn.addEventListener("click", async () => {
+  if (!selectedCaseId) return;
+  const text = followupInput.value.trim();
+  if (!text) return;
 
-closeCasesBtn.addEventListener("click", () => {
-  casesPanel.classList.add("hidden");
+  const caseRef = cases.find((c) => c.id === selectedCaseId);
+  if (!caseRef) return;
+
+  const contextualText = `${caseRef.problem}. Уточнение: ${text}`;
+  await processQuestion(contextualText, caseRef);
+  followupInput.value = "";
 });
 
 renderCases();
