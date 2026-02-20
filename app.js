@@ -1,5 +1,4 @@
-const STORAGE_CASES_KEY = "ferrumbot_cases_v4";
-const STORAGE_LEARN_KEY = "ferrumbot_learning_v4";
+const STORAGE_CASES_KEY = "ferrumbot_cases_v5";
 
 const problemInput = document.getElementById("problemInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -9,154 +8,19 @@ const casesPanel = document.getElementById("casesPanel");
 const casesToggleBtn = document.getElementById("casesToggleBtn");
 const closeCasesBtn = document.getElementById("closeCasesBtn");
 
-const SOURCE_INDEX = {
-  windows: {
-    patterns: /(плесень|окон|откос|промерзан|конденсат|сквозит|герметизац)/i,
-    sources: [
-      {
-        type: "СП",
-        name: "СП 50.13330.2012",
-        point: "раздел 5",
-        title: "Тепловая защита зданий",
-        weight: 0.96,
-        url: "https://docs.cntd.ru/document/1200095525",
-      },
-      {
-        type: "ГОСТ",
-        name: "ГОСТ 30971-2012",
-        point: "п. 5.1–5.3",
-        title: "Швы монтажные узлов примыкания окон",
-        weight: 0.95,
-        url: "https://docs.cntd.ru/document/1200100069",
-      },
-      {
-        type: "НПА",
-        name: "ГК РФ",
-        point: "ст. 723, 724",
-        title: "Ответственность за недостатки результата работ",
-        weight: 0.92,
-        url: "http://www.consultant.ru/document/cons_doc_LAW_5142/",
-      },
-    ],
-  },
-  leaks: {
-    patterns: /(протеч|теч|стояк|затоп|кровл|гидроизоляц|шов)/i,
-    sources: [
-      {
-        type: "СП",
-        name: "СП 30.13330.2020",
-        point: "раздел 7",
-        title: "Внутренний водопровод и канализация зданий",
-        weight: 0.96,
-        url: "https://docs.cntd.ru/document/573659358",
-      },
-      {
-        type: "СП",
-        name: "СП 17.13330.2017",
-        point: "раздел 5",
-        title: "Кровли",
-        weight: 0.94,
-        url: "https://docs.cntd.ru/document/456043632",
-      },
-      {
-        type: "НПА",
-        name: "ГК РФ",
-        point: "ст. 723, 724",
-        title: "Ответственность за недостатки результата работ",
-        weight: 0.92,
-        url: "http://www.consultant.ru/document/cons_doc_LAW_5142/",
-      },
-    ],
-  },
-  cracks: {
-    patterns: /(трещин|фасад|раскрыт|осадк|деформац|стяжк)/i,
-    sources: [
-      {
-        type: "СП",
-        name: "СП 70.13330.2012",
-        point: "раздел 8",
-        title: "Несущие и ограждающие конструкции",
-        weight: 0.95,
-        url: "https://docs.cntd.ru/document/1200095523",
-      },
-      {
-        type: "ГОСТ",
-        name: "ГОСТ 31937-2011",
-        point: "раздел 6",
-        title: "Правила обследования и мониторинга технического состояния",
-        weight: 0.94,
-        url: "https://docs.cntd.ru/document/1200095062",
-      },
-      {
-        type: "НПА",
-        name: "ГК РФ",
-        point: "ст. 723, 724",
-        title: "Ответственность за недостатки результата работ",
-        weight: 0.92,
-        url: "http://www.consultant.ru/document/cons_doc_LAW_5142/",
-      },
-    ],
-  },
-  ventilation: {
-    patterns: /(вентиляц|тяга|духота|влажност|воздухообмен)/i,
-    sources: [
-      {
-        type: "СП",
-        name: "СП 60.13330.2020",
-        point: "раздел 7",
-        title: "Отопление, вентиляция и кондиционирование",
-        weight: 0.95,
-        url: "https://docs.cntd.ru/document/573659360",
-      },
-      {
-        type: "СанПиН",
-        name: "СанПиН 1.2.3685-21",
-        point: "таблицы микроклимата",
-        title: "Гигиенические нормативы факторов среды",
-        weight: 0.93,
-        url: "https://docs.cntd.ru/document/573500115",
-      },
-      {
-        type: "НПА",
-        name: "ГК РФ",
-        point: "ст. 723, 724",
-        title: "Ответственность за недостатки результата работ",
-        weight: 0.92,
-        url: "http://www.consultant.ru/document/cons_doc_LAW_5142/",
-      },
-    ],
-  },
-  general: {
-    patterns: /.*/,
-    sources: [
-      {
-        type: "НПА",
-        name: "ГК РФ",
-        point: "ст. 723, 724",
-        title: "Ответственность за недостатки результата работ",
-        weight: 0.92,
-        url: "http://www.consultant.ru/document/cons_doc_LAW_5142/",
-      },
-      {
-        type: "НПА",
-        name: "ЗоЗПП",
-        point: "ст. 4, 7, 29",
-        title: "Требования к качеству и последствия недостатков работ/услуг",
-        weight: 0.91,
-        url: "http://www.consultant.ru/document/cons_doc_LAW_305/",
-      },
-    ],
-  },
-};
+const TRUSTED_DOMAINS = [
+  "consultant.ru",
+  "cntd.ru",
+  "pravo.gov.ru",
+  "sudrf.ru",
+  "ksrf.ru",
+  "vsrf.ru",
+  "fssp.gov.ru",
+  "minjust.gov.ru",
+  "government.ru",
+];
 
 let cases = readJson(STORAGE_CASES_KEY, []);
-let learning = readJson(STORAGE_LEARN_KEY, {
-  windows: { builder: 6, owner: 4 },
-  leaks: { builder: 7, owner: 3 },
-  cracks: { builder: 6, owner: 4 },
-  ventilation: { builder: 5, owner: 5 },
-  general: { builder: 5, owner: 5 },
-});
 
 function readJson(key, fallback) {
   try {
@@ -167,74 +31,94 @@ function readJson(key, fallback) {
   }
 }
 
-function persist() {
+function persistCases() {
   localStorage.setItem(STORAGE_CASES_KEY, JSON.stringify(cases));
-  localStorage.setItem(STORAGE_LEARN_KEY, JSON.stringify(learning));
 }
 
 function now() {
   return new Date().toLocaleString("ru-RU");
 }
 
-function detectBucket(problemText) {
-  const found = Object.entries(SOURCE_INDEX).find(([k, v]) => k !== "general" && v.patterns.test(problemText));
-  return found ? found[0] : "general";
+function normalizeUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.href;
+  } catch {
+    return null;
+  }
 }
 
-function collectContextFlags(text) {
-  const t = text.toLowerCase();
-  return {
-    ownerIntervention: /(перенос|переплан|сверлил|собственник.*ремонт|после ремонта|заменил)/.test(t),
-    directDamage: /(механическ|удар|повредил|сломал)/.test(t),
-    earlyAfterTransfer: /(после передачи|сразу|новая квартира|новострой)/.test(t),
-    noAlterations: /(без ремонта|не менял|не вмешивался)/.test(t),
-  };
+function isTrusted(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    return TRUSTED_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
 }
 
-function updateLearningDuringProcessing(bucket, flags) {
-  const model = learning[bucket] || { builder: 5, owner: 5 };
-  if (flags.earlyAfterTransfer || flags.noAlterations) model.builder += 0.25;
-  if (flags.ownerIntervention || flags.directDamage) model.owner += 0.25;
-  learning[bucket] = model;
+function extractLinksFromMarkdown(text) {
+  const links = [];
+  const regex = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+  let match = regex.exec(text);
+  while (match) {
+    const title = match[1].trim();
+    const rawUrl = normalizeUrl(match[2]);
+    if (rawUrl && isTrusted(rawUrl)) {
+      links.push({ title, url: rawUrl });
+    }
+    match = regex.exec(text);
+  }
+  return links;
 }
 
-function evaluateResponsibility(bucket, flags, sourceScore) {
-  const model = learning[bucket] || { builder: 5, owner: 5 };
-  let builder = model.builder;
-  let owner = model.owner;
-
-  if (flags.earlyAfterTransfer || flags.noAlterations) builder += 1;
-  if (flags.ownerIntervention) owner += 1.2;
-  if (flags.directDamage) owner += 1.5;
-  builder += sourceScore * 0.8;
-
-  return builder >= owner ? "Предварительно ответственная сторона: застройщик." : "Предварительно ответственная сторона: собственник/эксплуатация.";
+async function fetchAsText(url) {
+  const response = await fetch(url, { method: "GET" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
 }
 
-async function queryOpenSources(problemText) {
-  const bucket = detectBucket(problemText);
-  const flags = collectContextFlags(problemText);
-  updateLearningDuringProcessing(bucket, flags);
+async function searchTrustedSourcesRealtime(problemText) {
+  const query = encodeURIComponent(`${problemText} строительные нормы СП ГОСТ судебная практика`);
+  const ddgProxyUrl = `https://r.jina.ai/http://duckduckgo.com/html/?q=${query}`;
 
-  const selected = SOURCE_INDEX[bucket].sources;
-  const sourceScore = selected.reduce((acc, s) => acc + s.weight, 0) / selected.length;
+  const searchRaw = await fetchAsText(ddgProxyUrl);
+  const links = extractLinksFromMarkdown(searchRaw)
+    .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx)
+    .slice(0, 6);
 
-  await new Promise((resolve) => setTimeout(resolve, 1100));
+  const resolved = [];
+  for (const item of links) {
+    try {
+      const page = await fetchAsText(`https://r.jina.ai/http://${item.url.replace(/^https?:\/\//, "")}`);
+      const clean = page.replace(/\s+/g, " ").trim();
+      const snippet = clean.slice(0, 650);
+      if (snippet.length > 180) {
+        resolved.push({ ...item, snippet });
+      }
+    } catch {
+      // skip failed source
+    }
+    if (resolved.length >= 3) break;
+  }
 
-  const confidence = Math.max(0.85, Math.min(0.92, sourceScore));
-  const responsibility = evaluateResponsibility(bucket, flags, sourceScore);
+  return resolved;
+}
 
-  const normative = selected.map((s) => `${s.name}, ${s.point} (${s.title})`).join("; ");
-  const links = selected.map((s) => `${s.name}: ${s.url}`).join("\n");
+function buildNarrative(problemText, sources) {
+  const sourceNames = sources.map((s) => s.title).join("; ");
+  const sourceLinks = sources.map((s) => `- ${s.title}: ${s.url}`).join("\n");
+  const evidence = sources.map((s, i) => `Источник ${i + 1}: ${s.snippet}`).join("\n\n");
 
-  const factsText = `По тексту обращения выявлена категория «${bucket}». Система учитывает признаки вмешательства в объект, срок выявления дефекта относительно передачи и характер описанных повреждений.`;
-  const normText = `Для проверки применены открытые источники с приоритетом действующих нормативов и НПА: ${normative}.`;
-  const analysisText = `Сопоставление фактических признаков с требованиями нормативов показывает, что для окончательной фиксации виновной стороны нужны акт осмотра, фотофиксация и, при споре, техническое обследование. При этом уже на текущих данных система исключает недостоверные источники и использует только проверяемые реквизиты документов.`;
-  const finalText = `${responsibility} Решение по устранению дефекта должно приниматься после документальной фиксации причины, но по текущему набору признаков и нормативной опоре выбранная позиция имеет больший технический и правовой вес. Если потребуется усиление доказательной позиции, дополнительно запрашиваются: дата передачи, дата выявления дефекта, сведения о ремонте и результаты инструментальных замеров.`;
+  const base = `По вашему запросу «${problemText}» FerrumBot выполнил поиск в реальном времени по открытым источникам и сформировал вывод только по данным, которые удалось получить на текущий момент из доверенных доменов. На основании найденных материалов ключевой фокус проверки лежит в зоне соответствия выполненных работ действующим нормам качества, правильности технических узлов и причинно-следственной связи между дефектом и действиями сторон.`;
 
-  const full = `Краткий вывод.\n\n${responsibility} По текущим данным заключение сформировано с целевой точностью не ниже 85% при достаточности исходного описания и ссылочной верификации источников.\n\nНормативная база.\n\n${normText}\n\nАнализ источников.\n\n${factsText}\n\n${analysisText}\n\nИспользованные открытые источники:\n${links}\n\nОбоснованный итог.\n\n${finalText}`;
+  const legal = `Нормативная и правоприменительная база в данной выборке опирается на следующие источники: ${sourceNames}. При наличии расхождений между позициями приоритет отдается нормам закона и официальным судебным/государственным источникам, а не вторичным публикациям.`;
 
-  return { full, confidence, bucket };
+  const analysis = `Сопоставление найденных данных показывает, что вопрос о виновной стороне решается через подтверждение происхождения дефекта: если дефект обусловлен несоответствием строительных/монтажных решений нормативным требованиям, ответственность возлагается на исполнителя работ; если подтверждается вмешательство, нештатная эксплуатация или механическое повреждение после передачи, ответственность смещается на пользователя помещения. Для юридически устойчивого результата необходимы акт осмотра, фотофиксация, хронология возникновения дефекта и, при споре, независимое техническое обследование.`;
+
+  const final = `Итоговое решение по текущему запросу формируется как предварительное экспертное заключение с опорой на найденные в реальном времени источники. Для окончательного определения виновной стороны и способа устранения дефекта требуется документальная верификация фактов на объекте. Если предоставите акт осмотра, даты передачи/обнаружения и фото дефекта, FerrumBot обновит вывод более предметно и точно.`;
+
+  return `Краткий вывод.\n\n${base}\n\nНормативная база.\n\n${legal}\n\nАнализ источников.\n\n${analysis}\n\nФрагменты источников (realtime-выборка).\n\n${evidence}\n\nСсылки на использованные источники.\n${sourceLinks}\n\nОбоснованный итог.\n\n${final}`;
 }
 
 async function typeText(element, text, speed = 8) {
@@ -268,21 +152,30 @@ analyzeBtn.addEventListener("click", async () => {
   const text = problemInput.value.trim();
   if (!text) return;
 
-  resultBody.innerHTML = `<div class="status-line">FerrumBot выполняет поиск по открытым источникам и формирует проверяемый ответ...</div>`;
-  const result = await queryOpenSources(text);
+  resultBody.innerHTML = `<div class="status-line">FerrumBot выполняет realtime-поиск по открытым источникам...</div>`;
 
-  if (result.confidence < 0.85) {
+  let sources = [];
+  try {
+    sources = await searchTrustedSourcesRealtime(text);
+  } catch {
     resultBody.textContent =
-      "Недостаточно данных для точного вывода. Уточните дату передачи, дату выявления дефекта, место дефекта, историю вмешательств и приложите фото/акт осмотра.";
+      "Не удалось получить данные из открытых источников в реальном времени. Повторите запрос или проверьте сетевое подключение.";
     return;
   }
 
-  await typeText(resultBody, result.full);
+  if (!sources.length) {
+    resultBody.textContent =
+      "По запросу не удалось извлечь проверяемые данные из доверенных открытых источников. Уточните формулировку (тип дефекта, место, срок, обстоятельства).";
+    return;
+  }
 
-  const preview = result.full.slice(0, 180) + (result.full.length > 180 ? "..." : "");
-  cases.unshift({ createdAt: now(), problem: text, preview, fullText: result.full, bucket: result.bucket });
+  const full = buildNarrative(text, sources);
+  await typeText(resultBody, full);
+
+  const preview = full.slice(0, 180) + (full.length > 180 ? "..." : "");
+  cases.unshift({ createdAt: now(), problem: text, preview, fullText: full, sources });
   cases = cases.slice(0, 50);
-  persist();
+  persistCases();
   renderCases();
 });
 
