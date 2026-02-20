@@ -1,4 +1,5 @@
-const STORAGE_CASES_KEY = "ferrumbot_cases_v6";
+const STORAGE_CASES_KEY = "ferrumbot_cases_v7";
+const STORAGE_LEARNING_KEY = "ferrumbot_learning_v7";
 
 const problemInput = document.getElementById("problemInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -8,21 +9,22 @@ const followupInput = document.getElementById("followupInput");
 const followupBtn = document.getElementById("followupBtn");
 const activeCaseInfo = document.getElementById("activeCaseInfo");
 
-const SYSTEM_PROMPT = `Ты — интеллектуальная система анализа дефектов и нормативной практики с возможностью динамического обучения в момент запроса. Система выполняет поиск по открытым источникам и формирует обоснованные выводы. Ответ содержит: Краткий вывод, Нормативная база, Анализ источников, Обоснованный итог.`;
-
 const TRUSTED_DOMAINS = [
-  "consultant.ru",
+  "gost.ru",
+  "docs.cntd.ru",
   "cntd.ru",
+  "minstroyrf.gov.ru",
+  "faufcc.ru",
+  "rst.gov.ru",
+  "publication.pravo.gov.ru",
   "pravo.gov.ru",
-  "sudrf.ru",
-  "ksrf.ru",
-  "vsrf.ru",
-  "fssp.gov.ru",
-  "minjust.gov.ru",
-  "government.ru",
+  "standartgost.ru",
 ];
 
+const NORMATIVE_TITLE_PATTERN = /(ГОСТ|СНиП|СП\s|Свод правил|Техническ(ий|ого) регламент|ТР\s|Методическ|Рекомендац|Р\s\d+\.?\d*)/i;
+
 let cases = readJson(STORAGE_CASES_KEY, []);
+let learningMap = readJson(STORAGE_LEARNING_KEY, {});
 let selectedCaseId = null;
 
 function readJson(key, fallback) {
@@ -34,8 +36,9 @@ function readJson(key, fallback) {
   }
 }
 
-function persistCases() {
+function persistAll() {
   localStorage.setItem(STORAGE_CASES_KEY, JSON.stringify(cases));
+  localStorage.setItem(STORAGE_LEARNING_KEY, JSON.stringify(learningMap));
 }
 
 function now() {
@@ -72,59 +75,170 @@ function extractLinksFromMarkdown(text) {
   return links;
 }
 
+function analyzeInternally(rawText) {
+  const text = rawText.toLowerCase();
+
+  const defectType = /(плесень|конденсат|сырость|промерз)/.test(text)
+    ? "влажностно-теплотехнический"
+    : /(протеч|теч|затоп|стояк|кровл)/.test(text)
+      ? "протечка"
+      : /(трещин|деформац|раскрыт|осадк)/.test(text)
+        ? "деформационный"
+        : /(вентиляц|тяга|воздухообмен)/.test(text)
+          ? "вентиляционный"
+          : "общестроительный";
+
+  const location = /(кровл)/.test(text)
+    ? "кровля"
+    : /(стояк|сануз|канализац|водопровод)/.test(text)
+      ? "инженерный стояк"
+      : /(фасад|наруж)/.test(text)
+        ? "фасад/наружные ограждения"
+        : /(перекрыт|потолок)/.test(text)
+          ? "перекрытие"
+          : /(отделк|стяжк|плитк|штукатур)/.test(text)
+            ? "отделочные покрытия"
+            : /(окон|откос)/.test(text)
+              ? "оконный узел"
+              : "не уточнено";
+
+  const operationConditions = [
+    /(после зим|в мороз|зимой)/.test(text) ? "зимний период" : null,
+    /(высокая влаж|сыро|конденсат)/.test(text) ? "повышенная влажность" : null,
+    /(без отоплен|не заселен)/.test(text) ? "нештатный режим отопления/заселения" : null,
+  ].filter(Boolean);
+
+  const commissioningTerm = /(сразу|после передачи|новострой)/.test(text)
+    ? "ранний срок после ввода/передачи"
+    : /(через \d+ (месяц|месяцев|лет|года|год))/.test(text)
+      ? "срок указан пользователем"
+      : "срок не указан";
+
+  const technologyViolationSigns = [
+    /(плесень|конденсат|промерз)/.test(text) ? "возможное нарушение тепло-влажностного режима узла" : null,
+    /(протеч|теч)/.test(text) ? "возможное нарушение герметичности/гидроизоляции" : null,
+    /(трещин|раскрыт)/.test(text) ? "возможные нарушения технологии работ или проектного решения" : null,
+  ].filter(Boolean);
+
+  const defectClass = /(протеч|герметич|монтаж|шов)/.test(text)
+    ? "монтажный/технологический"
+    : /(трещин|деформац|осадк)/.test(text)
+      ? "конструктивный или проектный"
+      : /(после ремонта|вмешател|повред)/.test(text)
+        ? "эксплуатационный"
+        : "требует уточнения";
+
+  const systemType = /(стояк|вентиляц|водопровод|канализац)/.test(text)
+    ? "инженерные сети"
+    : /(фасад|окон|перекрыт|стена|кровл)/.test(text)
+      ? "ограждающие/несущие конструкции"
+      : "отделочные покрытия";
+
+  const normativeSectionHint = /(окон|откос|плесень|конденсат)/.test(text)
+    ? "тепловая защита и монтаж узлов примыкания"
+    : /(протеч|стояк|кровл)/.test(text)
+      ? "гидроизоляция и инженерные системы"
+      : /(трещин|деформац)/.test(text)
+        ? "допустимые дефекты конструкций"
+        : "общие требования к качеству работ";
+
+  return {
+    defectType,
+    location,
+    operationConditions,
+    commissioningTerm,
+    technologyViolationSigns,
+    defectClass,
+    systemType,
+    normativeSectionHint,
+    technicalOnly: true,
+  };
+}
+
 async function fetchAsText(url) {
   const res = await fetch(url, { method: "GET" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
 }
 
-async function searchTrustedSourcesRealtime(searchText) {
-  const query = encodeURIComponent(`${searchText} строительные нормы СП ГОСТ судебная практика`);
+async function searchTrustedSourcesRealtime(searchText, internal) {
+  const query = encodeURIComponent(`${searchText} ${internal.normativeSectionHint} ГОСТ СНиП СП технический регламент`);
   const searchRaw = await fetchAsText(`https://r.jina.ai/http://duckduckgo.com/html/?q=${query}`);
 
   const links = extractLinksFromMarkdown(searchRaw)
+    .filter((item) => NORMATIVE_TITLE_PATTERN.test(item.title))
     .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx)
-    .slice(0, 8);
+    .slice(0, 10);
 
   const resolved = [];
   for (const item of links) {
     try {
       const text = await fetchAsText(`https://r.jina.ai/http://${item.url.replace(/^https?:\/\//, "")}`);
-      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 700);
-      if (snippet.length > 180) resolved.push({ ...item, snippet });
+      const clean = text.replace(/\s+/g, " ").trim();
+      const snippet = clean.slice(0, 900);
+      if (snippet.length < 180) continue;
+
+      // hard filter: skip obvious non-normative promo/forum-like pages by keywords
+      if (/(форум|реклама|реклам|купить|продажа|маркетплейс)/i.test(clean.slice(0, 2000))) continue;
+
+      resolved.push({ ...item, snippet });
     } catch {
-      // skip source fetch errors
+      // skip errors
     }
-    if (resolved.length >= 4) break;
+    if (resolved.length >= 5) break;
   }
+
   return resolved;
 }
 
-function selectCase(caseId) {
-  selectedCaseId = caseId;
-  const selected = cases.find((c) => c.id === caseId);
-  followupInput.disabled = !selected;
-  followupBtn.disabled = !selected;
-  activeCaseInfo.textContent = selected
-    ? `Активный кейс: ${selected.problem.slice(0, 90)}`
-    : "Активный кейс: не выбран.";
-  if (selected?.history?.length) {
-    resultBody.textContent = selected.history[selected.history.length - 1].answer;
-  }
-  renderCases();
+function extractNormativeRefs(sources) {
+  const refs = [];
+  const refRegex = /(ГОСТ\s*\d+[\d.-]*|СНиП\s*\d+[\d.-]*|СП\s*\d+[\d.-]*|Техническ(?:ий|ого) регламент[^.,;\n]*)/gi;
+  const pointRegex = /(ст\.?\s*\d+(?:\.\d+)?|п\.?\s*\d+(?:\.\d+)?(?:[-–]\d+(?:\.\d+)?)?|раздел\s*\d+(?:\.\d+)?)/gi;
+
+  sources.forEach((s) => {
+    const titleMatches = (s.title.match(refRegex) || []).map((m) => m.trim());
+    const snippetMatches = (s.snippet.match(refRegex) || []).map((m) => m.trim());
+    const points = (s.snippet.match(pointRegex) || []).slice(0, 3).map((m) => m.trim());
+
+    [...new Set([...titleMatches, ...snippetMatches])].forEach((norm) => {
+      refs.push({ norm, points: points.length ? points.join(", ") : "пункт требует уточнения по первоисточнику", url: s.url });
+    });
+  });
+
+  return refs.slice(0, 8);
 }
 
-function buildStructuredAnswer(searchText, sources) {
-  const sourceNames = sources.map((s) => s.title).join("; ");
-  const sourceLinks = sources.map((s) => `- ${s.title}: ${s.url}`).join("\n");
-  const evidence = sources.map((s, i) => `Источник ${i + 1}: ${s.snippet}`).join("\n\n");
+function updateLearningMap(internal, refs) {
+  const key = `${internal.defectType} | ${internal.normativeSectionHint}`;
+  if (!learningMap[key]) {
+    learningMap[key] = { count: 0, norms: {} };
+  }
+  learningMap[key].count += 1;
+  refs.forEach((r) => {
+    learningMap[key].norms[r.norm] = (learningMap[key].norms[r.norm] || 0) + 1;
+  });
+}
 
-  const short = `По запросу «${searchText}» выполнен анализ открытых источников в реальном времени. Вывод сформирован только по найденным в текущей сессии данным из доверенных доменов.`;
-  const norms = `В анализ включены материалы из нормативных и правоприменительных источников: ${sourceNames}. Приоритет отдан действующим НПА, строительным нормам и официальным судебным/государственным ресурсам.`;
-  const analysis = `Найденные материалы указывают, что для определения виновной стороны ключевое значение имеет подтверждение причины дефекта актом осмотра и технической фиксацией. При противоречивых позициях больший юридический вес имеют федеральные законы и официальные документы судов/госорганов.`;
-  const final = `Итог квалифицирован как предварительный до получения документальных доказательств по объекту. Для однозначного решения нужно добавить дату передачи, дату обнаружения, сведения о вмешательствах, фотофиксацию и при необходимости экспертное обследование.`;
+function buildTechnicalAnswer(searchText, internal, sources, refs) {
+  const normsText = refs.length
+    ? refs.map((r) => `- ${r.norm}; ориентировочно: ${r.points}; источник: ${r.url}`).join("\n")
+    : "- По найденным материалам точные номера пунктов требуют дополнительной верификации в тексте официального документа.";
 
-  return `Краткий вывод.\n\n${short}\n\nНормативная база.\n\n${norms}\n\nАнализ источников.\n\n${analysis}\n\nФактические фрагменты найденных источников.\n\n${evidence}\n\nСсылки на использованные источники.\n${sourceLinks}\n\nОбоснованный итог.\n\n${final}`;
+  const sourceAnalysis = sources
+    .slice(0, 3)
+    .map((s, i) => `Источник ${i + 1}: ${s.title}\n${s.snippet.slice(0, 380)}...`)
+    .join("\n\n");
+
+  const qualification = /(монтажный|технологический)/.test(internal.defectClass)
+    ? "нарушение технологии"
+    : /(конструктивный|проектный)/.test(internal.defectClass)
+      ? "несоответствие нормативам или проектному решению"
+      : /(эксплуатационный)/.test(internal.defectClass)
+        ? "вероятное эксплуатационное воздействие"
+        : "требуется инструментальное обследование";
+
+  return `Краткое техническое заключение.\n\nПо обращению «${searchText}» выполнен технический анализ в реальном времени. Описание дефекта отнесено к типу «${internal.defectType}», зона возникновения — «${internal.location}», система — «${internal.systemType}». По совокупности признаков предварительная техническая квалификация: ${qualification}.\n\nПеречень применимых нормативных документов.\n\n${normsText}\n\nАнализ соответствия описанной ситуации требованиям нормативов.\n\nСопоставление признаков дефекта с найденными нормативными материалами показывает, что проверка должна фокусироваться на технологии выполнения работ, условиях монтажа и эксплуатационном режиме. Дополнительно учитываются: ${internal.operationConditions.join(", ") || "условия эксплуатации не уточнены"}; срок с момента ввода/передачи: ${internal.commissioningTerm}; признаки возможного нарушения технологии: ${internal.technologyViolationSigns.join(", ") || "явные признаки не указаны"}.\n\nИтоговая техническая квалификация.\n\n${qualification}. Для окончательного технического вывода требуется акт осмотра, инструментальные замеры (влажность/температура, тепловизионная съемка, измерение деформаций — по типу дефекта) и проверка узла на соответствие проектной документации.\n\nФрагменты источников.\n\n${sourceAnalysis}`;
 }
 
 async function typeText(element, text, speed = 8) {
@@ -139,6 +253,21 @@ function getCasePreview(text) {
   return text.replace(/\s+/g, " ").trim().slice(0, 95);
 }
 
+function selectCase(caseId) {
+  selectedCaseId = caseId;
+  const selected = cases.find((c) => c.id === caseId);
+  followupInput.disabled = !selected;
+  followupBtn.disabled = !selected;
+  activeCaseInfo.textContent = selected
+    ? `Активный кейс: ${selected.problem.slice(0, 90)}`
+    : "Активный кейс: не выбран.";
+
+  if (selected?.history?.length) {
+    resultBody.textContent = selected.history[selected.history.length - 1].answer;
+  }
+  renderCases();
+}
+
 function renderCases() {
   if (!cases.length) {
     casesContainer.innerHTML = "<p class='meta'>Кейсов пока нет.</p>";
@@ -148,12 +277,11 @@ function renderCases() {
   casesContainer.innerHTML = cases
     .map((item) => {
       const activeClass = item.id === selectedCaseId ? "active" : "";
-      const shortDefect = getCasePreview(item.problem);
       return `
         <div class="case ${activeClass}" data-id="${item.id}">
           <div class="meta">${item.createdAt}</div>
-          <strong>${shortDefect}</strong>
-          <p>${item.preview}</p>
+          <strong>${getCasePreview(item.problem)}</strong>
+          <p>${item.preview || "Ожидание анализа..."}</p>
         </div>
       `;
     })
@@ -167,28 +295,40 @@ function renderCases() {
 async function processQuestion(text, caseRef) {
   resultBody.innerHTML = `<div class="status-line">Ищу информацию.</div>`;
 
+  const internal = analyzeInternally(text); // internal stage, not fully shown to user
+
   let sources = [];
   try {
-    sources = await searchTrustedSourcesRealtime(text);
+    sources = await searchTrustedSourcesRealtime(text, internal);
   } catch {
     resultBody.textContent =
-      "Не удалось получить данные из открытых источников в реальном времени. Повторите запрос позже.";
+      "Не удалось выполнить realtime-поиск по нормативным источникам. Повторите запрос позже.";
     return null;
   }
 
   if (!sources.length) {
     resultBody.textContent =
-      "Проверяемые источники не найдены. Уточните формулировку: укажите тип дефекта, место, срок и обстоятельства.";
+      "Проверяемые нормативные источники не найдены. Уточните тип дефекта, место, срок с момента ввода и условия эксплуатации.";
     return null;
   }
 
-  const answer = buildStructuredAnswer(text, sources);
+  const refs = extractNormativeRefs(sources);
+  updateLearningMap(internal, refs);
+  const answer = buildTechnicalAnswer(text, internal, sources, refs);
   await typeText(resultBody, answer);
 
-  const historyRow = { question: text, answer, sources, at: now(), prompt: SYSTEM_PROMPT };
+  const historyRow = {
+    question: text,
+    answer,
+    sources,
+    refs,
+    internal,
+    at: now(),
+  };
+
   caseRef.history.push(historyRow);
-  caseRef.preview = answer.slice(0, 140) + (answer.length > 140 ? "..." : "");
-  persistCases();
+  caseRef.preview = answer.slice(0, 130) + (answer.length > 130 ? "..." : "");
+  persistAll();
   renderCases();
   return historyRow;
 }
