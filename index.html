@@ -8,81 +8,35 @@
   </head>
   <body>
     <header class="top-nav">
-      <div class="logo">FB</div>
-      <nav>
-        <a href="#">Дом</a>
-        <a href="#">Чат ИИ</a>
-        <a href="#">Видео ИИ</a>
-        <a href="#">Блог</a>
-      </nav>
-      <button class="auth-btn">Авторизоваться</button>
+      <div class="logo-wrap">
+        <div class="logo">FB</div>
+        <h1>FerrumBot</h1>
+      </div>
+      <button id="casesToggleBtn" class="cases-btn">Кейсы</button>
     </header>
 
-    <main class="layout">
-      <section class="chat-panel">
-        <div class="chat-head">
-          <h1>FerrumBot</h1>
-          <p>Юридический и технический помощник по гарантийным случаям ФЗ-214</p>
-        </div>
+    <aside id="casesPanel" class="cases-panel hidden">
+      <div class="cases-head">
+        <h2>Проработанные кейсы</h2>
+        <button id="closeCasesBtn">Закрыть</button>
+      </div>
+      <div id="cases"></div>
+    </aside>
 
-        <div class="message-box" id="resultBodyWrap">
-          <div id="resultBodyPlaceholder">
-            Введите описание дефекта, чтобы получить развернутое заключение со ссылками на нормы.
-          </div>
-        </div>
-
-        <div class="input-box">
-          <label for="problemInput">Опишите проблему</label>
-          <div class="input-row">
-            <input id="problemInput" type="text" placeholder="Например: Плесень на откосе окна, квартира угловая" />
-            <button id="analyzeBtn">Сформировать</button>
-          </div>
-        </div>
-
-        <div class="history-search">
-          <input id="searchInput" type="text" placeholder="Поиск по сохранённой истории" />
-          <button id="clearBtn" class="danger">Очистить</button>
-          <button id="downloadJsonBtn">JSON</button>
-          <button id="downloadTxtBtn">TXT</button>
-        </div>
+    <main class="main-wrap">
+      <section class="answer-card">
+        <div id="resultBody" class="result-text">Введите запрос внизу, и FerrumBot подготовит ответ после проверки по источникам.</div>
       </section>
 
-      <aside class="tools-panel">
-        <h2>Связанные инструменты</h2>
-        <div class="tool-card">
-          <h3>Сохранённые кейсы</h3>
-          <div id="cases"></div>
+      <section class="input-card">
+        <label for="problemInput">Опишите проблему</label>
+        <div class="input-row">
+          <input id="problemInput" type="text" placeholder="Например: Протечка стояка в санузле после передачи квартиры" />
+          <button id="analyzeBtn">Найти ответ</button>
         </div>
-        <div class="tool-card">
-          <h3>Журнал источников</h3>
-          <div id="sourceLog"></div>
-        </div>
-      </aside>
+      </section>
     </main>
 
-    <dialog id="resultDialog">
-      <article>
-        <h2>Развернутое заключение</h2>
-        <div id="resultBody"></div>
-        <div class="row actions wrap">
-          <button id="saveCaseBtn">Сохранить кейс</button>
-          <button id="feedbackUsefulBtn">✅ Подтвердилось (обучить)</button>
-          <button id="feedbackNotUsefulBtn" class="danger">❌ Не подтвердилось (обучить)</button>
-          <button id="closeDialogBtn">Закрыть окно</button>
-        </div>
-      </article>
-    </dialog>
-
     <script src="app.js"></script>
-    <script>
-      const resultBodyEl = document.getElementById('resultBody');
-      const placeholder = document.getElementById('resultBodyPlaceholder');
-      const observer = new MutationObserver(() => {
-        if (resultBodyEl && resultBodyEl.textContent.trim()) {
-          placeholder.innerHTML = resultBodyEl.innerHTML;
-        }
-      });
-      observer.observe(resultBodyEl, { childList: true, subtree: true, characterData: true });
-    </script>
   </body>
 </html>

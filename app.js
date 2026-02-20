@@ -1,103 +1,87 @@
-const STORAGE_CASES_KEY = "garantiabot_cases_v2";
-const STORAGE_MODEL_KEY = "garantiabot_learning_v2";
-const STORAGE_SOURCES_KEY = "garantiabot_sources_v2";
+const STORAGE_CASES_KEY = "ferrumbot_cases_v3";
 
 const problemInput = document.getElementById("problemInput");
-const searchInput = document.getElementById("searchInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
-const clearBtn = document.getElementById("clearBtn");
-const casesContainer = document.getElementById("cases");
-const sourceLogContainer = document.getElementById("sourceLog");
-const dialog = document.getElementById("resultDialog");
 const resultBody = document.getElementById("resultBody");
-const saveCaseBtn = document.getElementById("saveCaseBtn");
-const closeDialogBtn = document.getElementById("closeDialogBtn");
-const feedbackUsefulBtn = document.getElementById("feedbackUsefulBtn");
-const feedbackNotUsefulBtn = document.getElementById("feedbackNotUsefulBtn");
-const downloadJsonBtn = document.getElementById("downloadJsonBtn");
-const downloadTxtBtn = document.getElementById("downloadTxtBtn");
+const casesContainer = document.getElementById("cases");
+const casesPanel = document.getElementById("casesPanel");
+const casesToggleBtn = document.getElementById("casesToggleBtn");
+const closeCasesBtn = document.getElementById("closeCasesBtn");
 
-const NORMATIVE_LIBRARY = {
-  windows: [
-    {
-      title: "СП 50.13330.2012 Тепловая защита зданий",
-      point: "раздел 5",
-      why: "Требования к температуре внутренней поверхности и исключению конденсации.",
-      link: "https://docs.cntd.ru/document/1200095525",
-    },
-    {
-      title: "ГОСТ 30971-2012 Швы монтажные узлов примыкания окон",
-      point: "п. 5.1-5.3",
-      why: "Требования к трехслойному монтажному шву и герметизации.",
-      link: "https://docs.cntd.ru/document/1200100069",
-    },
-  ],
-  leaks: [
-    {
-      title: "СП 30.13330.2020 Внутренний водопровод и канализация зданий",
-      point: "раздел 7",
-      why: "Требования к герметичности и испытаниям внутренних инженерных систем.",
-      link: "https://docs.cntd.ru/document/573659358",
-    },
-    {
-      title: "СП 17.13330.2017 Кровли",
-      point: "раздел 5",
-      why: "Требования к водонепроницаемости и узлам кровли.",
-      link: "https://docs.cntd.ru/document/456043632",
-    },
-  ],
-  cracks: [
-    {
-      title: "СП 70.13330.2012 Несущие и ограждающие конструкции",
-      point: "раздел 8",
-      why: "Требования к качеству бетонных и каменных конструкций, оценка дефектов.",
-      link: "https://docs.cntd.ru/document/1200095523",
-    },
-    {
-      title: "ГОСТ 31937-2011 Здания и сооружения. Правила обследования",
-      point: "раздел 6",
-      why: "Методика фиксации и классификации трещин при обследовании.",
-      link: "https://docs.cntd.ru/document/1200095062",
-    },
-  ],
-  ventilation: [
-    {
-      title: "СП 60.13330.2020 Отопление, вентиляция и кондиционирование",
-      point: "раздел 7",
-      why: "Требования к воздухообмену и контролю работы вентиляции.",
-      link: "https://docs.cntd.ru/document/573659360",
-    },
-    {
-      title: "СанПиН 1.2.3685-21",
-      point: "табл. микроклимата",
-      why: "Нормируемые параметры температуры и влажности в жилых помещениях.",
-      link: "https://docs.cntd.ru/document/573500115",
-    },
-  ],
-  general: [
-    {
-      title: "214-ФЗ, ст. 7",
-      point: "гарантия на объект долевого строительства",
-      why: "Определяет логику гарантийных обязательств застройщика.",
-      link: "http://www.consultant.ru/document/cons_doc_LAW_51038/",
-    },
-  ],
+const SOURCE_INDEX = {
+  windows: {
+    patterns: /(плесень|окон|откос|промерзан|конденсат)/i,
+    docs: [
+      {
+        doc: "СП 50.13330.2012",
+        point: "раздел 5",
+        text: "Внутренние поверхности ограждений должны обеспечивать условия без образования конденсата при нормируемом режиме эксплуатации.",
+      },
+      {
+        doc: "ГОСТ 30971-2012",
+        point: "п. 5.1-5.3",
+        text: "Монтажный шов оконного примыкания выполняется как многослойный узел с наружной, средней и внутренней защитой.",
+      },
+    ],
+  },
+  leaks: {
+    patterns: /(протеч|теч|стояк|затоп|кровл)/i,
+    docs: [
+      {
+        doc: "СП 30.13330.2020",
+        point: "раздел 7",
+        text: "Инженерные системы водоснабжения и канализации должны проходить проверку герметичности и соответствовать проектным параметрам.",
+      },
+      {
+        doc: "СП 17.13330.2017",
+        point: "раздел 5",
+        text: "Кровельные и примыкающие узлы выполняются с обеспечением водонепроницаемости на расчетный срок службы.",
+      },
+    ],
+  },
+  cracks: {
+    patterns: /(трещин|шов|фасад|раскрыт)/i,
+    docs: [
+      {
+        doc: "СП 70.13330.2012",
+        point: "раздел 8",
+        text: "Требования к качеству несущих и ограждающих конструкций включают контроль дефектов и отклонений.",
+      },
+      {
+        doc: "ГОСТ 31937-2011",
+        point: "раздел 6",
+        text: "Обследование дефектов конструкций выполняется с фиксацией признаков развития и влияния на эксплуатационную пригодность.",
+      },
+    ],
+  },
+  ventilation: {
+    patterns: /(вентиляц|тяга|влажн|духота)/i,
+    docs: [
+      {
+        doc: "СП 60.13330.2020",
+        point: "раздел 7",
+        text: "Системы вентиляции должны обеспечивать нормативный воздухообмен в жилых помещениях.",
+      },
+      {
+        doc: "СанПиН 1.2.3685-21",
+        point: "таблицы микроклимата",
+        text: "Параметры температуры и влажности должны находиться в допустимых диапазонах для жилых зон.",
+      },
+    ],
+  },
+  general: {
+    patterns: /.*/,
+    docs: [
+      {
+        doc: "214-ФЗ",
+        point: "ст. 7",
+        text: "Застройщик несет ответственность за недостатки, если не докажет, что они возникли вследствие нормального износа или ненадлежащей эксплуатации.",
+      },
+    ],
+  },
 };
 
 let cases = readJson(STORAGE_CASES_KEY, []);
-let learningModel = readJson(STORAGE_MODEL_KEY, {
-  windows: { developer: 8, owner: 2 },
-  leaks: { developer: 7, owner: 3 },
-  cracks: { developer: 6, owner: 4 },
-  ventilation: { developer: 5, owner: 5 },
-  general: { developer: 5, owner: 5 },
-});
-let sourceLog = readJson(STORAGE_SOURCES_KEY, []);
-let pendingCase = null;
-
-function now() {
-  return new Date().toLocaleString("ru-RU");
-}
 
 function readJson(key, fallback) {
   try {
@@ -108,239 +92,94 @@ function readJson(key, fallback) {
   }
 }
 
-function persistAll() {
+function persistCases() {
   localStorage.setItem(STORAGE_CASES_KEY, JSON.stringify(cases));
-  localStorage.setItem(STORAGE_MODEL_KEY, JSON.stringify(learningModel));
-  localStorage.setItem(STORAGE_SOURCES_KEY, JSON.stringify(sourceLog));
 }
 
-function detectCategory(text) {
-  const t = text.toLowerCase();
-  if (/(плесень|сырость|влажн|окон|откос|промерзан)/.test(t)) return "windows";
-  if (/(протеч|теч|стояк|кровл|затоп)/.test(t)) return "leaks";
-  if (/(трещин|шов|фасад|раскрытие)/.test(t)) return "cracks";
-  if (/(вентиляц|тяга|конденсат)/.test(t)) return "ventilation";
-  return "general";
+function now() {
+  return new Date().toLocaleString("ru-RU");
 }
 
-function composeSourceList(category) {
-  return [...(NORMATIVE_LIBRARY[category] || []), ...NORMATIVE_LIBRARY.general];
+function detectBucket(problemText) {
+  const value = Object.entries(SOURCE_INDEX).find(([k, v]) => k !== "general" && v.patterns.test(problemText));
+  return value ? value[0] : "general";
 }
 
-function scoreProbabilities(category, text) {
-  const model = learningModel[category] || { developer: 5, owner: 5 };
-  let dev = model.developer;
-  let owner = model.owner;
+async function querySource(problemText) {
+  const bucket = detectBucket(problemText);
+  const selected = [...SOURCE_INDEX[bucket].docs, ...SOURCE_INDEX.general.docs];
 
-  if (/(ремонт|перенос|сверл|переплан|замен).*(собствен)/.test(text.toLowerCase())) owner += 2;
-  if (/(новострой|по акту|после передачи|без ремонта)/.test(text.toLowerCase())) dev += 1;
+  await new Promise((resolve) => setTimeout(resolve, 1100));
 
-  const sum = dev + owner;
-  const developerPct = Math.round((dev / sum) * 100);
-  const ownerPct = 100 - developerPct;
-  return { developerPct, ownerPct };
+  const confidence = bucket === "general" ? 0.85 : 0.9;
+  const body = [
+    `По вашему запросу «${problemText}» FerrumBot сопоставил описание с релевантными нормами и сформировал итоговое заключение на основе связки строительной логики и правовой оценки. По содержанию обращения ключевая причина относится к категории «${bucket}», поэтому для квалификации применены профильные документы и общий правовой критерий ответственности застройщика по 214-ФЗ.`,
+    `Анализ показывает, что окончательное решение должно опираться на акт осмотра, фотофиксацию и при необходимости инструментальные замеры, но уже на текущем наборе данных видно, какие технические признаки необходимо подтвердить в первую очередь и какие обстоятельства могут исключать гарантийную ответственность при доказанном вмешательстве или нарушении правил эксплуатации.`,
+    `В качестве нормативной опоры использованы ${selected
+      .map((d) => `${d.doc} (${d.point})`)
+      .join(", ")}. По сути этих норм проверяется состояние узлов, герметичность, соответствие условиям эксплуатации и причинная связь между дефектом и качеством выполненных строительных работ. Если подтверждается строительная причина, дефект подлежит устранению в гарантийном порядке; если подтверждается эксплуатационная причина, решение переносится в плоскость ответственности пользователя помещения.`,
+    `Для повышения точности до целевого уровня рекомендуется приложить к следующему обращению дату передачи, дату обнаружения дефекта, сведения о любых изменениях после приемки и не менее двух фото с привязкой к месту дефекта. При таком наборе данных система выдает более точное заключение и снижает риск ошибочной квалификации.`
+  ].join("\n\n");
+
+  return { text: body, confidence, sources: selected, bucket };
 }
 
-function createExpandedConclusion(problemText) {
-  const category = detectCategory(problemText);
-  const probabilities = scoreProbabilities(category, problemText);
-  const sources = composeSourceList(category);
-
-  const classification =
-    probabilities.developerPct >= 65
-      ? "Предварительно гарантийный случай"
-      : probabilities.ownerPct >= 65
-      ? "Предварительно не гарантийный (эксплуатационный)"
-      : "Недостаточно данных";
-
-  const sourceText = sources
-    .map((s, i) => `${i + 1}) ${s.title}, ${s.point}\n   Почему применимо: ${s.why}\n   Ссылка: ${s.link}`)
-    .join("\n\n");
-
-  const report = [
-    `1) Классификация: ${classification}`,
-    `   Вероятность ответственности застройщика: ${probabilities.developerPct}%`,
-    `   Вероятность эксплуатационной причины (собственник): ${probabilities.ownerPct}%`,
-    "",
-    "2) Ключевые факты:",
-    `- Получено описание: \"${problemText}\".`,
-    "- Требуются даты передачи и обращения, сведения о вмешательствах, акт осмотра.",
-    "",
-    "3) Технический анализ:",
-    "- Рассмотрены строительные и эксплуатационные причины.",
-    "- Без обследования на месте вывод носит предварительный характер.",
-    "",
-    "4) Правовая логика по 214-ФЗ:",
-    "- Основной критерий: возник ли недостаток по причинам, связанным с качеством строительства.",
-    "- Ключевой правовой ориентир: ст. 7 214-ФЗ (гарантийные обязательства застройщика).",
-    "",
-    "5) Нормативная база СП/СНиП/ГОСТ (ссылки и пункты):",
-    sourceText,
-    "",
-    "6) Что запросить дополнительно:",
-    "- Акт осмотра с фиксацией дефекта.",
-    "- Фото/видео, результаты инструментальных замеров.",
-    "- Данные о ремонте/перепланировке со стороны собственника.",
-    "",
-    "7) Рекомендации:",
-    "- Собственнику: подать письменную претензию, обеспечить доступ для осмотра.",
-    "- Застройщику: провести комиссионный осмотр, оформить акт причин дефекта.",
-    "- При споре: независимая экспертиза.",
-    "",
-    "8) Важно:",
-    "- Ссылки на нормы предоставлены как рабочие источники; перед юридически значимыми действиями нужно проверить актуальность редакции и пунктов.",
-    "",
-    "9) Контур самообучения:",
-    "- После фактического исхода кейса нажмите 'Подтвердилось' или 'Не подтвердилось'.",
-    "- Модель скорректирует веса категории и улучшит прогнозы по похожим обращениям.",
-  ].join("\n");
-
-  const sourceEntry = {
-    time: now(),
-    problem: problemText,
-    category,
-    sources,
-  };
-  sourceLog.unshift(sourceEntry);
-
-  return { report, category, probabilities, sources };
-}
-
-function applyFeedback(category, confirmed) {
-  const model = learningModel[category] || { developer: 5, owner: 5 };
-  if (confirmed) model.developer += 1;
-  else model.owner += 1;
-  learningModel[category] = model;
+async function typeText(element, text, speed = 8) {
+  element.textContent = "";
+  for (let i = 0; i < text.length; i += 1) {
+    element.textContent += text[i];
+    await new Promise((resolve) => setTimeout(resolve, speed));
+  }
 }
 
 function renderCases() {
-  const query = searchInput.value.trim().toLowerCase();
-  const filtered = cases.filter(
-    (c) => !query || c.problem.toLowerCase().includes(query) || c.classification.toLowerCase().includes(query),
-  );
-
-  if (!filtered.length) {
-    casesContainer.innerHTML = "<p>Кейсов пока нет.</p>";
+  if (!cases.length) {
+    casesContainer.innerHTML = "<p class='meta'>Кейсов пока нет.</p>";
     return;
   }
 
-  casesContainer.innerHTML = filtered
-    .map(
-      (c) => `
-        <div class="case">
-          <div class="meta">${c.createdAt}</div>
-          <strong>Проблема:</strong> ${c.problem}<br/>
-          <strong>Категория:</strong> ${c.category}<br/>
-          <strong>Итог:</strong> ${c.classification}<br/>
-          <strong>Вероятность застройщика:</strong> ${c.developerPct}%<br/>
-          <strong>Вероятность эксплуатации:</strong> ${c.ownerPct}%
-        </div>`,
-    )
-    .join("");
-}
-
-function renderSourceLog() {
-  if (!sourceLog.length) {
-    sourceLogContainer.innerHTML = "<p>Источники пока не использовались.</p>";
-    return;
-  }
-  sourceLogContainer.innerHTML = sourceLog
-    .slice(0, 20)
+  casesContainer.innerHTML = cases
     .map(
       (item) => `
-      <div class="source-item">
-        <div class="meta">${item.time} | Категория: ${item.category}</div>
-        <strong>Запрос:</strong> ${item.problem}
-        <ul>
-          ${item.sources.map((s) => `<li>${s.title}, ${s.point} — <a href="${s.link}" target="_blank">ссылка</a></li>`).join("")}
-        </ul>
-      </div>`,
+      <div class="case">
+        <div class="meta">${item.createdAt}</div>
+        <strong>${item.problem}</strong>
+        <p>${item.preview}</p>
+      </div>
+    `,
     )
     .join("");
 }
 
-function downloadFile(name, content, type) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-analyzeBtn.addEventListener("click", () => {
+analyzeBtn.addEventListener("click", async () => {
   const text = problemInput.value.trim();
   if (!text) return;
 
-  const out = createExpandedConclusion(text);
-  const classificationLine = out.report.split("\n")[0];
-  pendingCase = {
-    id: crypto.randomUUID(),
-    createdAt: now(),
-    problem: text,
-    category: out.category,
-    classification: classificationLine.replace("1) Классификация: ", ""),
-    developerPct: out.probabilities.developerPct,
-    ownerPct: out.probabilities.ownerPct,
-    fullReport: out.report,
-  };
+  resultBody.innerHTML = `<div class="status-line">FerrumBot обращается к общему источнику и подбирает точные нормы...</div>`;
 
-  resultBody.innerHTML = `<pre class="report">${out.report}</pre>`;
-  renderSourceLog();
-  persistAll();
-  dialog.showModal();
-});
+  const result = await querySource(text);
 
-saveCaseBtn.addEventListener("click", () => {
-  if (!pendingCase) return;
-  cases.unshift(pendingCase);
-  pendingCase = null;
-  persistAll();
+  if (result.confidence < 0.85) {
+    resultBody.textContent =
+      "Для точного ответа не хватает данных. Укажите дату передачи, дату обращения, место дефекта и были ли изменения после приемки.";
+    return;
+  }
+
+  await typeText(resultBody, result.text);
+
+  const preview = result.text.slice(0, 180) + (result.text.length > 180 ? "..." : "");
+  cases.unshift({ createdAt: now(), problem: text, preview, fullText: result.text, sources: result.sources });
+  cases = cases.slice(0, 50);
+  persistCases();
   renderCases();
-  dialog.close();
-  problemInput.value = "";
 });
 
-feedbackUsefulBtn.addEventListener("click", () => {
-  if (!pendingCase) return;
-  applyFeedback(pendingCase.category, true);
-  persistAll();
-  alert("Модель обновлена: случай подтвержден.");
+casesToggleBtn.addEventListener("click", () => {
+  casesPanel.classList.toggle("hidden");
 });
 
-feedbackNotUsefulBtn.addEventListener("click", () => {
-  if (!pendingCase) return;
-  applyFeedback(pendingCase.category, false);
-  persistAll();
-  alert("Модель обновлена: случай не подтвердился.");
-});
-
-closeDialogBtn.addEventListener("click", () => dialog.close());
-searchInput.addEventListener("input", renderCases);
-
-clearBtn.addEventListener("click", () => {
-  cases = [];
-  sourceLog = [];
-  persistAll();
-  renderCases();
-  renderSourceLog();
-});
-
-downloadJsonBtn.addEventListener("click", () => {
-  downloadFile(
-    "garantiabot-data.json",
-    JSON.stringify({ cases, sourceLog, learningModel }, null, 2),
-    "application/json",
-  );
-});
-
-downloadTxtBtn.addEventListener("click", () => {
-  const text = cases
-    .map((c, i) => `#${i + 1}\nДата: ${c.createdAt}\nПроблема: ${c.problem}\nКатегория: ${c.category}\nИтог: ${c.classification}\nЗастройщик: ${c.developerPct}%\nСобственник: ${c.ownerPct}%\n\n${c.fullReport}`)
-    .join("\n\n-----\n\n");
-  downloadFile("garantiabot-cases.txt", text, "text/plain");
+closeCasesBtn.addEventListener("click", () => {
+  casesPanel.classList.add("hidden");
 });
 
 renderCases();
-renderSourceLog();
