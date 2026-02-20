@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FerrumBot</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top-nav">
+      <div class="logo-wrap">
+        <div class="logo">FB</div>
+        <h1>FerrumBot</h1>
+      </div>
+    </header>
+
+    <main class="main-wrap">
+      <section class="left-column">
+        <section class="answer-card">
+          <div id="resultBody" class="result-text">Введите проблему. После запуска FerrumBot выполнит семантический анализ и покажет технический вывод.</div>
+        </section>
+
+        <section class="input-card">
+          <label for="problemInput">Новый кейс: описание проблемы</label>
+          <div class="input-row">
+            <input id="problemInput" type="text" placeholder="Например: Протечка стояка и трещина на откосе" />
+            <button id="analyzeBtn">⦿→</button>
+          </div>
+
+          <label for="followupInput" class="follow-label">Продолжение диалога по выбранному кейсу</label>
+          <div class="input-row">
+            <input id="followupInput" type="text" placeholder="Выберите кейс справа, чтобы уточнить вопрос" disabled />
+            <button id="followupBtn" disabled>Уточнить</button>
+          </div>
+
+          <div class="input-row feedback-row">
+            <button id="confirmBtn" disabled>Подтвердить вывод</button>
+            <button id="rejectBtn" disabled>Оспорить вывод</button>
+          </div>
+
+          <p id="activeCaseInfo" class="meta">Активный кейс: не выбран.</p>
+        </section>
+      </section>
+
+      <aside class="right-column">
+        <section class="cases-card">
+          <h2>Кейсы</h2>
+          <div id="cases"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
