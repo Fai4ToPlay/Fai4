@@ -16,6 +16,23 @@
 - Автосохранение форм
 - 3-дневные акты с автодатой
 
+## Один файл для запуска и проверки
+
+Используйте единый скрипт:
+
+```bash
+./ONE_FILE_START_CHECK.sh setup
+./ONE_FILE_START_CHECK.sh db
+./ONE_FILE_START_CHECK.sh check
+./ONE_FILE_START_CHECK.sh run
+```
+
+Для desktop-режима:
+
+```bash
+./ONE_FILE_START_CHECK.sh desktop
+```
+
 ## Быстрый запуск
 
 Подробно: `docs/RUN.md`
