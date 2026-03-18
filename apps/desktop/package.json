@@ -1,0 +1,13 @@
+{
+  "name": "@fai4/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build": "echo 'Use electron-builder for production packaging'"
+  },
+  "dependencies": {
+    "electron": "^35.0.0"
+  }
+}
