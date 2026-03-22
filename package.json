@@ -1,0 +1,15 @@
+{
+  "name": "fai4-platform",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/api & npm run dev -w apps/web",
+    "dev:desktop": "npm run dev -w apps/desktop",
+    "build": "npm run build -w apps/api && npm run build -w apps/web && npm run build -w apps/desktop"
+  }
+}
