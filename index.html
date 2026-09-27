@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Tarkov Field Guide — безопасный помощник для подготовки к рейдам." />
+    <title>Tarkov Field Guide</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Tarkov Field Guide — на главную">
+        <span class="brand-mark">TFG</span>
+        <span><strong>Tarkov</strong><small>Field Guide</small></span>
+      </a>
+      <nav aria-label="Основная навигация">
+        <a class="active" href="#planner">Планировщик</a>
+        <a href="#checklist">Снаряжение</a>
+        <a href="#notes">Заметки</a>
+      </nav>
+      <div class="status"><i></i> Локальный режим</div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">ВЫЖИВАЙ УМНЕЕ</p>
+          <h1>Подготовься.<br /><em>Войди.</em> Выживи.</h1>
+          <p class="lead">Спокойная подготовка к рейду без оверлеев, чтения памяти игры и вмешательства в Escape from Tarkov.</p>
+        </div>
+        <div class="raid-clock" aria-label="Таймер тренировки">
+          <span>ТАЙМЕР ТРЕНИРОВКИ</span>
+          <strong id="timer">25:00</strong>
+          <div class="timer-actions">
+            <button id="timer-toggle" class="primary">Запустить</button>
+            <button id="timer-reset" class="icon-button" aria-label="Сбросить таймер">↻</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats" aria-label="Статистика подготовки">
+        <article><span>ГОТОВНОСТЬ</span><strong id="readiness">0%</strong><div class="meter"><i id="readiness-bar"></i></div></article>
+        <article><span>ВЫБРАННАЯ КАРТА</span><strong id="selected-map-label">Таможня</strong><small>план рейда</small></article>
+        <article><span>ЗАДАЧ В РЕЙДЕ</span><strong id="task-count">0</strong><small>активных целей</small></article>
+      </section>
+
+      <section id="planner" class="panel">
+        <div class="section-title">
+          <div><p class="eyebrow">01 / МАРШРУТ</p><h2>Планировщик рейда</h2></div>
+          <button id="clear-all" class="ghost">Очистить план</button>
+        </div>
+        <div class="planner-grid">
+          <div>
+            <label for="map-select">Карта</label>
+            <select id="map-select">
+              <option>Таможня</option><option>Развязка</option><option>Лес</option><option>Берег</option><option>Резерв</option><option>Маяк</option><option>Улицы Таркова</option><option>Завод</option>
+            </select>
+          </div>
+          <div>
+            <label for="goal-input">Главная цель</label>
+            <div class="input-row"><input id="goal-input" maxlength="80" placeholder="Например: найти квестовый предмет" /><button id="add-goal" class="primary">Добавить</button></div>
+          </div>
+        </div>
+        <ul id="goals" class="goals" aria-live="polite"></ul>
+      </section>
+
+      <div class="columns">
+        <section id="checklist" class="panel">
+          <div class="section-title compact"><div><p class="eyebrow">02 / КОНТРОЛЬ</p><h2>Перед выходом</h2></div><span id="check-progress">0 / 7</span></div>
+          <div id="gear-list" class="check-list"></div>
+        </section>
+
+        <section id="notes" class="panel notes-panel">
+          <div class="section-title compact"><div><p class="eyebrow">03 / РАЗБОР</p><h2>Полевые заметки</h2></div><span class="autosave">АВТОСОХРАНЕНИЕ</span></div>
+          <textarea id="notes-area" maxlength="1500" placeholder="Точки интереса, ошибки прошлого рейда, ориентиры и план отхода…"></textarea>
+          <div class="notes-footer"><span>Хранится только в этом браузере</span><span id="char-count">0 / 1500</span></div>
+        </section>
+      </div>
+
+      <aside class="safety">
+        <span class="shield">◇</span>
+        <div><strong>Честный помощник</strong><p>Приложение не подключается к игре, не читает её память и не пытается обходить античит. Используйте его до или после рейда и соблюдайте правила Battlestate Games.</p></div>
+      </aside>
+    </main>
+    <footer><span>TARKOV FIELD GUIDE</span><span>НЕОФИЦИАЛЬНОЕ ФАНАТСКОЕ ПРИЛОЖЕНИЕ</span></footer>
+    <script src="app.js"></script>
+  </body>
+</html>
