@@ -1,0 +1,6 @@
+{
+  "name": "Skyline.EditModeTests",
+  "references": ["Skyline.Runtime"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "includePlatforms": ["Editor"]
+}

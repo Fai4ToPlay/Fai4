@@ -1,0 +1,6 @@
+{
+  "name": "Skyline.Runtime",
+  "references": ["Unity.InputSystem"],
+  "allowUnsafeCode": false,
+  "autoReferenced": true
+}
